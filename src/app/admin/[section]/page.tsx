@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AdminSectionPage } from "@/components/portal/section-pages";
 import { roleSectionGroups } from "@/components/portal/route-section";
 import { getDashboardMetrics, getScopedSelectors } from "@/lib/portal/selectors";
@@ -10,6 +10,9 @@ export default async function AdminSectionRoute({
   params: Promise<{ section: string }>;
 }) {
   const { section } = await params;
+  if (section === "companies") {
+    redirect("/admin/employers");
+  }
   const validSections = new Set(roleSectionGroups.admin.flatMap((group) => group.items.map((item) => item.key)));
   if (!validSections.has(section)) {
     notFound();

@@ -125,9 +125,9 @@ export async function getDashboardMetrics(role: PortalRole, user: PortalUser): P
   if (role === "admin") {
     return [
       {
-        label: "Companies",
+        label: "Employers",
         value: String(snapshot.companies.length),
-        hint: `${snapshot.companies.filter((company) => company.status === "inactive").length} inactive clients`,
+        hint: `${snapshot.companies.filter((company) => company.status === "inactive").length} inactive employers`,
         tone: "blue",
       },
       {
@@ -158,7 +158,7 @@ export async function getDashboardMetrics(role: PortalRole, user: PortalUser): P
   if (role === "employer") {
     return [
       {
-        label: "Company Status",
+        label: "Employer Status",
         value: company?.status === "inactive" ? "Inactive" : "Active",
         hint: canRunOperationalActionsForCompany({
           role: "employer",

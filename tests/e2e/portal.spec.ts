@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("admin can log in, view companies, and open an employee modal", async ({ page }) => {
+test("admin can log in, view employers, and open an employee modal", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill("admin@eor.com");
   await page.getByLabel("Password").fill("Admin@123");
@@ -9,9 +9,9 @@ test("admin can log in, view companies, and open an employee modal", async ({ pa
   await expect(page).toHaveURL(/\/admin\/overview$/);
   await expect(page.getByText("Admin workspace")).toBeVisible();
 
-  await page.locator("aside").getByRole("link", { name: "Companies", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/companies$/);
-  await expect(page.getByRole("heading", { name: "Company controls", exact: true })).toBeVisible();
+  await page.locator("aside").getByRole("link", { name: "Employers", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/employers$/);
+  await expect(page.getByRole("heading", { name: "Employer directory", exact: true })).toBeVisible();
 
   await page.locator("aside").getByRole("link", { name: "Employees", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/employees$/);

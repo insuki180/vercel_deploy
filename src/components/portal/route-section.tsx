@@ -1,7 +1,6 @@
 import type { ComponentType } from "react";
 import {
   Banknote,
-  Briefcase,
   Building2,
   FileCheck2,
   FileText,
@@ -40,8 +39,7 @@ export const roleSectionGroups: Record<PortalRole, PortalSectionGroup[]> = {
     {
       label: "People",
       items: [
-        { key: "companies", label: "Companies", href: "/admin/companies", icon: Building2 },
-        { key: "employers", label: "Employers", href: "/admin/employers", icon: Briefcase },
+        { key: "employers", label: "Employers", href: "/admin/employers", icon: Building2 },
         { key: "employees", label: "Employees", href: "/admin/employees", icon: Users },
         { key: "admins", label: "Admins", href: "/admin/admins", icon: UserCog },
       ],

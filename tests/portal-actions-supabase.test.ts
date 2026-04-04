@@ -150,7 +150,6 @@ describe("portal actions in Supabase mode", () => {
     });
     expect(revalidatePath).toHaveBeenCalledWith("/");
     expect(revalidatePath).toHaveBeenCalledWith("/admin");
-    expect(revalidatePath).toHaveBeenCalledWith("/admin/companies");
     expect(revalidatePath).toHaveBeenCalledWith("/admin/employers");
     expect(revalidatePath).not.toHaveBeenCalledWith("/employer");
     expect(revalidatePath).not.toHaveBeenCalledWith("/employee");

@@ -20,6 +20,7 @@ import {
 import { initialCreateCompanyActionState } from "@/lib/portal/action-states";
 import type { CreateCompanyActionState } from "@/lib/portal/action-states";
 import type {
+  CompanyRecord,
   DashboardSummaryCard,
   EmployeeRecord,
   EmployerProfile,
@@ -63,11 +64,11 @@ function MetricGrid({ metrics }: { metrics: DashboardSummaryCard[] }) {
 function EmployeeDetailContent({
   employee,
   state,
-  companyName,
+  employerName,
 }: {
   employee: EmployeeRecord;
   state: PortalState;
-  companyName?: string;
+  employerName?: string;
 }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -78,7 +79,7 @@ function EmployeeDetailContent({
           <div className="flex justify-between gap-4"><dt>Email</dt><dd>{employee.workEmail}</dd></div>
           <div className="flex justify-between gap-4"><dt>Phone</dt><dd>{employee.phone}</dd></div>
           <div className="flex justify-between gap-4"><dt>Designation</dt><dd>{employee.designation}</dd></div>
-          <div className="flex justify-between gap-4"><dt>Company</dt><dd>{companyName ?? "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>Employer</dt><dd>{employerName ?? "-"}</dd></div>
           <div className="flex justify-between gap-4"><dt>Status</dt><dd><StatusBadge status={employee.status} /></dd></div>
         </dl>
         {employee.status === "pending_verification" ? (
@@ -118,20 +119,21 @@ function EmployeeDetailContent({
 
 function EmployerDetailContent({
   employer,
-  companyName,
+  contact,
 }: {
-  employer: EmployerProfile;
-  companyName?: string;
+  employer: CompanyRecord;
+  contact?: EmployerProfile;
 }) {
   return (
     <div className="grid gap-4">
       <div className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
         <h4 className="font-semibold text-slate-950">Employer profile</h4>
         <dl className="mt-4 space-y-2 text-sm">
-          <div className="flex justify-between gap-4"><dt>Name</dt><dd>{employer.name}</dd></div>
-          <div className="flex justify-between gap-4"><dt>Title</dt><dd>{employer.title}</dd></div>
-          <div className="flex justify-between gap-4"><dt>Phone</dt><dd>{employer.phone}</dd></div>
-          <div className="flex justify-between gap-4"><dt>Company</dt><dd>{companyName ?? "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>Employer</dt><dd>{employer.name}</dd></div>
+          <div className="flex justify-between gap-4"><dt>Country</dt><dd>{employer.clientCountry || employer.country || "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>Primary contact</dt><dd>{employer.primaryContactName || contact?.name || "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>Contact email</dt><dd>{employer.primaryContactEmail || "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>Contact phone</dt><dd>{contact?.phone || "-"}</dd></div>
           <div className="flex justify-between gap-4"><dt>Status</dt><dd><StatusBadge status={employer.status} /></dd></div>
         </dl>
       </div>
@@ -162,7 +164,10 @@ export function AdminSectionPage({
   );
   const companyById = useMemo(() => getCompanyMap(state), [state]);
   const selectedEmployee = state.employees.find((employee) => employee.id === selectedEmployeeId);
-  const selectedEmployer = state.employers.find((employer) => employer.id === selectedEmployerId);
+  const selectedEmployer = state.companies.find((employer) => employer.id === selectedEmployerId);
+  const selectedEmployerContact = selectedEmployer
+    ? state.employers.find((entry) => entry.companyId === selectedEmployer.id)
+    : undefined;
 
   const filteredEmployees = state.employees.filter((employee) => {
     const matchesSearch =
@@ -176,14 +181,15 @@ export function AdminSectionPage({
     return matchesSearch && matchesCompany && matchesStatus && matchesDate;
   });
 
-  const filteredEmployers = state.employers.filter((employer) => {
-    const company = companyById[employer.companyId];
+  const filteredEmployers = state.companies.filter((employer) => {
+    const contact = state.employers.find((entry) => entry.companyId === employer.id);
     const matchesSearch =
       !search ||
       employer.name.toLowerCase().includes(search.toLowerCase()) ||
-      employer.title.toLowerCase().includes(search.toLowerCase()) ||
-      company?.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCompany = companyFilter === "all" || employer.companyId === companyFilter;
+      employer.primaryContactName.toLowerCase().includes(search.toLowerCase()) ||
+      employer.primaryContactEmail.toLowerCase().includes(search.toLowerCase()) ||
+      contact?.phone?.toLowerCase().includes(search.toLowerCase());
+    const matchesCompany = companyFilter === "all" || employer.id === companyFilter;
     const matchesStatus = statusFilter === "all" || employer.status === statusFilter;
     return matchesSearch && matchesCompany && matchesStatus;
   });
@@ -215,8 +221,8 @@ export function AdminSectionPage({
     <>
       <PortalPage
         eyebrow="Admin workspace"
-        title="Operational visibility for people, payroll, approvals, and company controls."
-        description="Manage companies, employer access, hiring approvals, employee verification, leave governance, payroll generation, and offboarding from dedicated sections."
+        title="Operational visibility for employers, people, payroll, approvals, and lifecycle controls."
+        description="Manage employers, hiring approvals, employee verification, leave governance, payroll generation, and offboarding from dedicated sections."
         metrics={section === "overview" ? <MetricGrid metrics={metrics} /> : undefined}
       >
         {section !== "overview" ? (
@@ -224,7 +230,7 @@ export function AdminSectionPage({
             <div className="grid gap-4 md:grid-cols-4">
               <Input placeholder="Search records" value={search} onChange={(event) => setSearch(event.target.value)} />
               <Select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
-                <option value="all">All companies</option>
+                <option value="all">All employers</option>
                 {state.companies.map((company) => (
                   <option key={company.id} value={company.id}>{company.name}</option>
                 ))}
@@ -283,16 +289,16 @@ export function AdminSectionPage({
           </div>
         ) : null}
 
-        {section === "companies" ? (
+        {section === "employers" ? (
           <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-            <Panel title="Add company" description="Create a new client company and a working employer login in one step.">
+            <Panel title="Add employer" description="Create a new employer account and a working employer login in one step.">
               <form action={companyCreateFormAction} className="grid gap-4">
-                <Input name="name" placeholder="Client company name" />
-                <Input name="clientCountry" placeholder="Client country" />
+                <Input name="name" placeholder="Employer name" />
+                <Input name="clientCountry" placeholder="Employer country" />
                 <Input name="contactName" placeholder="Primary contact name" />
                 <Input name="contactEmail" placeholder="Primary contact email" />
                 <Input name="password" type="password" placeholder="Temporary password (optional)" />
-                <PendingSubmitButton idleLabel="Create company and employer login" pendingLabel="Creating..." />
+                <PendingSubmitButton idleLabel="Create employer and login" pendingLabel="Creating..." />
               </form>
               {companyCreateState.status !== "idle" ? (
                 <div
@@ -313,53 +319,50 @@ export function AdminSectionPage({
                 </div>
               ) : null}
             </Panel>
-            <Panel title="Company controls" description="Activate or deactivate companies without losing history.">
+            <Panel title="Employer directory" description="Manage employer status, primary contacts, and record details.">
               <div className="grid gap-4 md:grid-cols-2">
-                {state.companies.map((company) => (
-                  <div key={company.id} className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-slate-950">{company.name}</p>
-                        <p className="text-sm text-slate-500">{company.clientCountry} client · India delivery</p>
+                {filteredEmployers.map((company) => (
+                  <article
+                    key={company.id}
+                    className="rounded-[1.5rem] border border-slate-100 bg-slate-50/70 p-4 transition hover:border-sky-200 hover:bg-white"
+                  >
+                    <button type="button" onClick={() => setSelectedEmployerId(company.id)} className="w-full text-left">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-slate-950">{company.name}</p>
+                          <p className="text-sm text-slate-500">{company.clientCountry} employer · India delivery</p>
+                        </div>
+                        <StatusBadge status={company.status} />
                       </div>
-                      <StatusBadge status={company.status} />
+                      <p className="mt-4 text-sm text-slate-600">{company.primaryContactName}</p>
+                      <p className="text-sm text-slate-500">{company.primaryContactEmail}</p>
+                    </button>
+                    <div className="mt-4 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEmployerId(company.id)}
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-200 hover:text-sky-700"
+                      >
+                        View employer
+                      </button>
+                      <form action={toggleCompanyStatusAction.bind(null, company.id)} className="flex-1">
+                        <PendingSubmitButton
+                          idleLabel={company.status === "active" ? "Deactivate employer" : "Reactivate employer"}
+                          pendingLabel="Saving..."
+                          variant="secondary"
+                          className="w-full"
+                        />
+                      </form>
                     </div>
-                    <p className="mt-4 text-sm text-slate-600">{company.primaryContactEmail}</p>
-                    <form action={toggleCompanyStatusAction.bind(null, company.id)} className="mt-4">
-                      <PendingSubmitButton
-                        idleLabel={company.status === "active" ? "Deactivate company" : "Reactivate company"}
-                        pendingLabel="Saving..."
-                        variant="secondary"
-                      />
-                    </form>
-                  </div>
+                  </article>
                 ))}
               </div>
             </Panel>
           </div>
         ) : null}
 
-        {section === "employers" ? (
-          <Panel title="Employer records" description="Open any record for employer details.">
-            <DataTable
-              rows={filteredEmployers}
-              emptyTitle="No employers match the current filters"
-              emptyDescription="Adjust the filters or add company-side contacts."
-              onRowClick={(row) => setSelectedEmployerId(row.id)}
-              activeRowId={selectedEmployerId}
-              columns={[
-                { key: "name", header: "Employer", sortable: true },
-                { key: "title", header: "Title" },
-                { key: "company", header: "Company", render: (row) => companyById[row.companyId]?.name ?? "-" },
-                { key: "phone", header: "Phone" },
-                { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
-              ]}
-            />
-          </Panel>
-        ) : null}
-
         {section === "employees" ? (
-          <Panel title="Employee records" description="Filter by person, company, date, and status.">
+          <Panel title="Employee records" description="Filter by person, employer, date, and status.">
             <DataTable
               rows={filteredEmployees}
               emptyTitle="No employees match the current filters"
@@ -369,7 +372,7 @@ export function AdminSectionPage({
               columns={[
                 { key: "fullName", header: "Employee", sortable: true },
                 { key: "designation", header: "Designation" },
-                { key: "company", header: "Company", render: (row) => companyById[row.companyId]?.name ?? "-" },
+                { key: "company", header: "Employer", render: (row) => companyById[row.companyId]?.name ?? "-" },
                 { key: "joiningDate", header: "Joining Date" },
                 { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
                 { key: "payrollReady", header: "Payroll", render: (row) => <Badge tone={row.payrollReady ? "emerald" : "amber"}>{row.payrollReady ? "Ready" : "Pending"}</Badge> },
@@ -620,7 +623,7 @@ export function AdminSectionPage({
               </div>
               <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
                 <p className="font-semibold text-slate-950">Permissions</p>
-                <p className="mt-2 text-sm text-slate-500">This role can manage companies, approvals, payroll, and lifecycle operations.</p>
+                <p className="mt-2 text-sm text-slate-500">This role can manage employers, approvals, payroll, and lifecycle operations.</p>
               </div>
             </div>
           </Panel>
@@ -628,10 +631,10 @@ export function AdminSectionPage({
       </PortalPage>
 
       <DetailModal title={selectedEmployee ? selectedEmployee.fullName : "Employee details"} open={Boolean(selectedEmployee)} onClose={() => setSelectedEmployeeId(null)}>
-        {selectedEmployee ? <EmployeeDetailContent employee={selectedEmployee} state={state} companyName={companyById[selectedEmployee.companyId]?.name} /> : null}
+        {selectedEmployee ? <EmployeeDetailContent employee={selectedEmployee} state={state} employerName={companyById[selectedEmployee.companyId]?.name} /> : null}
       </DetailModal>
       <DetailModal title={selectedEmployer ? selectedEmployer.name : "Employer details"} open={Boolean(selectedEmployer)} onClose={() => setSelectedEmployerId(null)}>
-        {selectedEmployer ? <EmployerDetailContent employer={selectedEmployer} companyName={companyById[selectedEmployer.companyId]?.name} /> : null}
+        {selectedEmployer ? <EmployerDetailContent employer={selectedEmployer} contact={selectedEmployerContact} /> : null}
       </DetailModal>
     </>
   );
@@ -679,7 +682,7 @@ export function EmployerSectionPage({
             </Link>
             <Link href="/employer/team" className="rounded-[1.5rem] border border-slate-100 bg-white p-5">
               <p className="font-semibold text-slate-950">Team</p>
-              <p className="mt-2 text-sm text-slate-500">{state.employees.length} employees in this company</p>
+              <p className="mt-2 text-sm text-slate-500">{state.employees.length} employees under this employer</p>
             </Link>
             <Link href="/employer/leave" className="rounded-[1.5rem] border border-slate-100 bg-white p-5">
               <p className="font-semibold text-slate-950">Leave</p>
@@ -780,7 +783,7 @@ export function EmployerSectionPage({
         ) : null}
 
         {section === "payroll" ? (
-          <Panel title="Payroll visibility" description="Latest generated payroll rows for your company.">
+          <Panel title="Payroll visibility" description="Latest generated payroll rows for your employer account.">
             <div className="space-y-3">
               {state.payrolls.map((payroll) => {
                 const employee = state.employees.find((entry) => entry.id === payroll.employeeId);
@@ -849,10 +852,10 @@ export function EmployerSectionPage({
         ) : null}
 
         {section === "settings" ? (
-          <Panel title="Settings" description="Account and company context for this workspace.">
+          <Panel title="Settings" description="Account and employer context for this workspace.">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                <p className="font-semibold text-slate-950">Company</p>
+                <p className="font-semibold text-slate-950">Employer</p>
                 <p className="mt-2 text-sm text-slate-500">{company?.name ?? "-"}</p>
                 <p className="text-sm text-slate-500">{company?.status ?? "-"}</p>
               </div>
@@ -867,7 +870,7 @@ export function EmployerSectionPage({
       </PortalPage>
 
       <DetailModal title={selectedEmployee ? selectedEmployee.fullName : "Employee details"} open={Boolean(selectedEmployee)} onClose={() => setSelectedEmployeeId(null)}>
-        {selectedEmployee ? <EmployeeDetailContent employee={selectedEmployee} state={state} companyName={company?.name} /> : null}
+        {selectedEmployee ? <EmployeeDetailContent employee={selectedEmployee} state={state} employerName={company?.name} /> : null}
       </DetailModal>
     </>
   );
