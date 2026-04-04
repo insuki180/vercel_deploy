@@ -1,6 +1,7 @@
 "use client";
 
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { useFormStatus } from "react-dom";
 import { AlertTriangle, ArrowUpRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -193,6 +194,30 @@ export function Button({
       {children}
     </button>
   );
+}
+
+export function PendingSubmitButton({
+  idleLabel,
+  pendingLabel,
+  variant = "primary",
+  className,
+}: {
+  idleLabel: string;
+  pendingLabel: string;
+  variant?: "primary" | "secondary" | "ghost";
+  className?: string;
+}) {
+  const { pending } = useFormStatus();
+
+  return (
+    <Button type="submit" variant={variant} loading={pending} disabled={pending} className={className}>
+      {pending ? pendingLabel : idleLabel}
+    </Button>
+  );
+}
+
+export function SkeletonBlock({ className }: { className?: string }) {
+  return <div className={cn("animate-pulse rounded-3xl bg-slate-200/70", className)} />;
 }
 
 export function Input({

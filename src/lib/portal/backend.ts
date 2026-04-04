@@ -50,10 +50,10 @@ function mapCompanies(rows: SupabaseRecord[]): CompanyRecord[] {
   }));
 }
 
-function mapUsers(rows: SupabaseRecord[]): PortalUser[] {
+function mapUsers(rows: SupabaseRecord[], authEmails = new Map<string, string>()): PortalUser[] {
   return rows.map((row) => ({
     id: safeString(row.id),
-    email: safeString(row.email),
+    email: authEmails.get(safeString(row.id)) ?? safeString(row.email),
     password: "",
     name: safeString(row.full_name),
     role: toPortalRole(row.role),
@@ -137,6 +137,10 @@ export async function getPortalSnapshot(): Promise<PortalState> {
   }
 
   const supabase = createSupabaseAdminClient();
+  const authUsersRes = await supabase.auth.admin.listUsers();
+  const authEmails = new Map(
+    (authUsersRes.data?.users ?? []).map((entry) => [entry.id, entry.email ?? ""]),
+  );
   const [
     profilesRes,
     companiesRes,
@@ -174,7 +178,7 @@ export async function getPortalSnapshot(): Promise<PortalState> {
   ]);
 
   const state = buildEmptyState();
-  state.users = mapUsers((profilesRes.data ?? []) as SupabaseRecord[]);
+  state.users = mapUsers((profilesRes.data ?? []) as SupabaseRecord[], authEmails);
   state.companies = mapCompanies((companiesRes.data ?? []) as SupabaseRecord[]);
   state.employers = ((companyUsersRes.data ?? []) as SupabaseRecord[]).map((row) => ({
     id: safeString(row.id),
@@ -429,6 +433,33 @@ export async function createCompanyInBackend(input: {
     created_by: input.createdBy,
     primary_contact_name: input.contactName,
     primary_contact_email: input.contactEmail,
+  });
+}
+
+export async function createAdminInBackend(input: {
+  fullName: string;
+  email: string;
+  password: string;
+}) {
+  if (!ensureSupabaseWritable()) {
+    mutatePortalState((state) => {
+      state.users.unshift({
+        id: createId("user"),
+        email: input.email,
+        password: input.password,
+        name: input.fullName,
+        role: "admin",
+      });
+    });
+    return;
+  }
+
+  const authUser = await getOrCreateAuthUser(input.email, input.password, input.fullName);
+  const supabase = createSupabaseAdminClient();
+  await supabase.from("profiles").upsert({
+    id: authUser.id,
+    role: "admin",
+    full_name: input.fullName,
   });
 }
 

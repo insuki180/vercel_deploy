@@ -8,6 +8,7 @@ const cookies = vi.fn(async () => ({
 }));
 
 const backendMocks = {
+  createAdminInBackend: vi.fn(),
   createCompanyInBackend: vi.fn(),
   toggleCompanyStatusInBackend: vi.fn(),
   createHiringRequestInBackend: vi.fn(),
@@ -93,7 +94,23 @@ describe("portal actions in Supabase mode", () => {
 
     await loginAction(formData);
 
-    expect(redirect).toHaveBeenCalledWith("/admin");
+    expect(redirect).toHaveBeenCalledWith("/admin/overview");
+  });
+
+  it("delegates admin creation to the backend adapter", async () => {
+    const { createAdminAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("fullName", "Kiran Admin");
+    formData.set("email", "kiran@example.com");
+    formData.set("password", "Kiran@123");
+
+    await createAdminAction(formData);
+
+    expect(backendMocks.createAdminInBackend).toHaveBeenCalledWith({
+      fullName: "Kiran Admin",
+      email: "kiran@example.com",
+      password: "Kiran@123",
+    });
   });
 
   it("delegates hiring request creation to the backend adapter", async () => {

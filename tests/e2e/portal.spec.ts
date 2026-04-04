@@ -6,8 +6,15 @@ test("admin can log in, view companies, and open an employee modal", async ({ pa
   await page.getByLabel("Password").fill("Admin@123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByText("Admin Control Room")).toBeVisible();
-  await expect(page.getByRole("paragraph").filter({ hasText: "Globex Remote Labs" }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/overview$/);
+  await expect(page.getByText("Admin workspace")).toBeVisible();
+
+  await page.locator("aside").getByRole("link", { name: "Companies", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/companies$/);
+  await expect(page.getByRole("heading", { name: "Company controls", exact: true })).toBeVisible();
+
+  await page.locator("aside").getByRole("link", { name: "Employees", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/employees$/);
 
   await page.getByRole("cell", { name: "Priya Sharma" }).first().click();
   await expect(page.getByText("Expanded record view for faster operational decisions.")).toBeVisible();
@@ -19,7 +26,9 @@ test("employer can create a hiring request", async ({ page }) => {
   await page.getByLabel("Password").fill("Employer@123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByText("Employer Workspace")).toBeVisible();
+  await expect(page).toHaveURL(/\/employer\/overview$/);
+  await page.locator("aside").getByRole("link", { name: "Hiring", exact: true }).click();
+  await expect(page).toHaveURL(/\/employer\/hiring$/);
 
   await page.getByPlaceholder("Candidate full name").fill("Nisha Kapoor");
   await page.getByPlaceholder("Candidate work email").fill("nisha@example.com");
@@ -39,7 +48,9 @@ test("employee can submit a leave request and access a payslip PDF", async ({ pa
   await page.getByLabel("Password").fill("Employee@123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByText("Employee Self Service")).toBeVisible();
+  await expect(page).toHaveURL(/\/employee\/overview$/);
+  await page.locator("aside").getByRole("link", { name: "Leave", exact: true }).click();
+  await expect(page).toHaveURL(/\/employee\/leave$/);
 
   await page.getByRole("combobox").first().selectOption("sick");
   await page.getByRole("spinbutton").first().fill("2");
@@ -47,6 +58,9 @@ test("employee can submit a leave request and access a payslip PDF", async ({ pa
   await page.getByRole("button", { name: "Submit leave request" }).click();
 
   await expect(page.getByText("2 paid · 0 loss of pay")).toBeVisible();
+
+  await page.locator("aside").getByRole("link", { name: "Payslips", exact: true }).click();
+  await expect(page).toHaveURL(/\/employee\/payslips$/);
 
   const pdfHref = await page.getByRole("link", { name: "Download PDF" }).first().getAttribute("href");
   expect(pdfHref).toBeTruthy();

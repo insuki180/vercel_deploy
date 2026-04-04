@@ -5,9 +5,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { calculatePayrollRecord } from "@/lib/domain/payroll";
 import { buildEmployeeLeaveBalances, evaluateLeaveRequest, settleApprovedLeave } from "@/lib/domain/leave";
+import { getDefaultRoleHref } from "@/components/portal/route-section";
 import {
   approveEmployeeInBackend,
   completeOnboardingInBackend,
+  createAdminInBackend,
   createCompanyInBackend,
   createHiringRequestInBackend,
   loginWithSupabase,
@@ -72,13 +74,7 @@ export async function loginAction(formData: FormData) {
     const { getPortalSnapshot } = await import("@/lib/portal/backend");
     const snapshot = await getPortalSnapshot();
     const matchedUser = snapshot.users.find((entry) => entry.id === data.user?.id);
-    redirect(
-      matchedUser?.role === "admin"
-        ? "/admin"
-        : matchedUser?.role === "employer"
-          ? "/employer"
-          : "/employee",
-    );
+    redirect(getDefaultRoleHref(matchedUser?.role ?? "employee"));
     return;
   }
 
@@ -99,7 +95,7 @@ export async function loginAction(formData: FormData) {
     path: "/",
   });
 
-  redirect(user.role === "admin" ? "/admin" : user.role === "employer" ? "/employer" : "/employee");
+  redirect(getDefaultRoleHref(user.role));
 }
 
 export async function logoutAction() {
@@ -119,6 +115,16 @@ export async function createCompanyAction(formData: FormData) {
     clientCountry: String(formData.get("clientCountry") ?? "United States"),
     contactName: String(formData.get("contactName") ?? "New Contact"),
     contactEmail: String(formData.get("contactEmail") ?? "contact@example.com"),
+  });
+
+  touchPortalPaths();
+}
+
+export async function createAdminAction(formData: FormData) {
+  await createAdminInBackend({
+    fullName: String(formData.get("fullName") ?? ""),
+    email: String(formData.get("email") ?? "").trim().toLowerCase(),
+    password: String(formData.get("password") ?? ""),
   });
 
   touchPortalPaths();
@@ -165,7 +171,7 @@ export async function createHiringRequestAction(formData: FormData) {
     });
 
     touchPortalPaths();
-    redirect("/employer");
+    redirect("/employer/hiring");
     return;
   }
 
@@ -191,7 +197,7 @@ export async function createHiringRequestAction(formData: FormData) {
   });
 
   touchPortalPaths();
-  redirect("/employer");
+  redirect("/employer/hiring");
 }
 
 export async function reviewHiringRequestAction(hiringRequestId: string, formData: FormData) {

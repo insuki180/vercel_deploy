@@ -1,4 +1,5 @@
 import { ShieldCheck } from "lucide-react";
+import { PendingSubmitButton } from "@/components/ui/portal-kit";
 import { loginAction } from "@/lib/portal/actions";
 
 const demoAccounts = [
@@ -74,7 +75,7 @@ export default async function LoginPage({
 
             {error ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                Invalid credentials. Use one of the seeded demo accounts shown on the left.
+                Invalid credentials. Use one of the seeded portal accounts shown on the left.
               </div>
             ) : null}
 
@@ -84,12 +85,11 @@ export default async function LoginPage({
               </div>
             ) : null}
 
-            <button
-              type="submit"
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Sign in
-            </button>
+            <PendingSubmitButton
+              idleLabel="Sign in"
+              pendingLabel="Signing in..."
+              className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            />
           </form>
         </section>
       </div>

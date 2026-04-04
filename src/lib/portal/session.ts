@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getDefaultRoleHref } from "@/components/portal/route-section";
 import { getCurrentPortalUser } from "@/lib/portal/backend";
 import type { PortalRole, PortalUser } from "@/lib/portal/types";
 
@@ -36,13 +37,7 @@ export async function requireUser() {
 export async function requireRole(role: PortalRole) {
   const user = await requireUser();
   if (user.role !== role) {
-    redirect(
-      user.role === "admin"
-        ? "/admin"
-        : user.role === "employer"
-          ? "/employer"
-          : "/employee",
-    );
+    redirect(getDefaultRoleHref(user.role));
   }
   return user;
 }
