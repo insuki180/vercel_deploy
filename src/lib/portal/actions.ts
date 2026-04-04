@@ -140,6 +140,13 @@ export async function createCompanyAction(formData: FormData): Promise<CreateCom
   }
 }
 
+export async function createCompanyFormAction(
+  _previousState: CreateCompanyActionState,
+  formData: FormData,
+): Promise<CreateCompanyActionState> {
+  return createCompanyAction(formData);
+}
+
 export async function createAdminAction(formData: FormData) {
   await createAdminInBackend({
     fullName: String(formData.get("fullName") ?? ""),

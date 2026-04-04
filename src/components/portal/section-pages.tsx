@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   approveEmployeeAction,
   createAdminAction,
-  createCompanyAction,
+  createCompanyFormAction,
   createHiringRequestAction,
   reviewHiringRequestAction,
   reviewLeaveRequestAction,
@@ -157,8 +157,7 @@ export function AdminSectionPage({
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
   const [companyCreateState, companyCreateFormAction] = useActionState<CreateCompanyActionState, FormData>(
-    async (_previousState, formData) =>
-      createCompanyAction(formData),
+    createCompanyFormAction,
     initialCreateCompanyActionState,
   );
   const companyById = useMemo(() => getCompanyMap(state), [state]);
