@@ -148,6 +148,12 @@ describe("portal actions in Supabase mode", () => {
         employerPassword: "Temp@12345",
       },
     });
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/companies");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/employers");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/employer");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/employee");
   });
 
   it("delegates hiring request creation to the backend adapter", async () => {

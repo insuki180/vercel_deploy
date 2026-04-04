@@ -54,11 +54,9 @@ function optionalFormString(formData: FormData, key: string) {
   return value || undefined;
 }
 
-function touchPortalPaths() {
-  revalidatePath("/");
-  revalidatePath("/admin");
-  revalidatePath("/employer");
-  revalidatePath("/employee");
+function touchPortalPaths(paths?: string[]) {
+  const targets = paths ?? ["/", "/admin", "/employer", "/employee"];
+  targets.forEach((path) => revalidatePath(path));
 }
 
 export async function loginAction(formData: FormData) {
@@ -120,7 +118,7 @@ export async function createCompanyAction(formData: FormData): Promise<CreateCom
       password: String(formData.get("password") ?? ""),
     });
 
-    touchPortalPaths();
+    touchPortalPaths(["/", "/admin", "/admin/companies", "/admin/employers"]);
 
     return {
       status: "success",
