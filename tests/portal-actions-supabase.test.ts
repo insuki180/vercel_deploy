@@ -113,6 +113,43 @@ describe("portal actions in Supabase mode", () => {
     });
   });
 
+  it("returns created employer credentials when a company is created", async () => {
+    const { createCompanyAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("name", "Northstar Labs");
+    formData.set("clientCountry", "United Kingdom");
+    formData.set("contactName", "Riya Mehta");
+    formData.set("contactEmail", "riya@northstarlabs.com");
+    formData.set("password", "");
+
+    backendMocks.createCompanyInBackend.mockResolvedValue({
+      companyId: "company_123",
+      employerUserId: "user_123",
+      employerName: "Riya Mehta",
+      employerEmail: "riya@northstarlabs.com",
+      employerPassword: "Temp@12345",
+    });
+
+    const result = await createCompanyAction(formData);
+
+    expect(backendMocks.createCompanyInBackend).toHaveBeenCalledWith({
+      name: "Northstar Labs",
+      clientCountry: "United Kingdom",
+      contactName: "Riya Mehta",
+      contactEmail: "riya@northstarlabs.com",
+      password: "",
+    });
+    expect(result).toEqual({
+      status: "success",
+      message: "Employer login created for Northstar Labs.",
+      credentials: {
+        employerName: "Riya Mehta",
+        employerEmail: "riya@northstarlabs.com",
+        employerPassword: "Temp@12345",
+      },
+    });
+  });
+
   it("delegates hiring request creation to the backend adapter", async () => {
     const { createHiringRequestAction } = await import("@/lib/portal/actions");
     const formData = new FormData();

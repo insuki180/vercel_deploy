@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   approveEmployeeAction,
@@ -17,6 +17,8 @@ import {
   updateOffboardingStatusAction,
   uploadEmployeeDocumentAction,
 } from "@/lib/portal/actions";
+import { initialCreateCompanyActionState } from "@/lib/portal/action-states";
+import type { CreateCompanyActionState } from "@/lib/portal/action-states";
 import type {
   DashboardSummaryCard,
   EmployeeRecord,
@@ -154,6 +156,11 @@ export function AdminSectionPage({
   const [companyFilter, setCompanyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
+  const [companyCreateState, companyCreateFormAction] = useActionState<CreateCompanyActionState, FormData>(
+    async (_previousState, formData) =>
+      createCompanyAction(formData),
+    initialCreateCompanyActionState,
+  );
   const companyById = useMemo(() => getCompanyMap(state), [state]);
   const selectedEmployee = state.employees.find((employee) => employee.id === selectedEmployeeId);
   const selectedEmployer = state.employers.find((employer) => employer.id === selectedEmployerId);
@@ -279,14 +286,33 @@ export function AdminSectionPage({
 
         {section === "companies" ? (
           <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-            <Panel title="Add company" description="Create a new client company with its primary contact.">
-              <form action={createCompanyAction} className="grid gap-4">
+            <Panel title="Add company" description="Create a new client company and a working employer login in one step.">
+              <form action={companyCreateFormAction} className="grid gap-4">
                 <Input name="name" placeholder="Client company name" />
                 <Input name="clientCountry" placeholder="Client country" />
                 <Input name="contactName" placeholder="Primary contact name" />
                 <Input name="contactEmail" placeholder="Primary contact email" />
-                <PendingSubmitButton idleLabel="Create company" pendingLabel="Creating..." />
+                <Input name="password" type="password" placeholder="Temporary password (optional)" />
+                <PendingSubmitButton idleLabel="Create company and employer login" pendingLabel="Creating..." />
               </form>
+              {companyCreateState.status !== "idle" ? (
+                <div
+                  className={`mt-5 rounded-[1.5rem] border p-4 ${
+                    companyCreateState.status === "success"
+                      ? "border-emerald-200 bg-emerald-50/80"
+                      : "border-rose-200 bg-rose-50/80"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-slate-950">{companyCreateState.message}</p>
+                  {companyCreateState.credentials ? (
+                    <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                      <p><span className="font-semibold text-slate-950">Employer:</span> {companyCreateState.credentials.employerName}</p>
+                      <p><span className="font-semibold text-slate-950">Email:</span> {companyCreateState.credentials.employerEmail}</p>
+                      <p><span className="font-semibold text-slate-950">Temporary password:</span> {companyCreateState.credentials.employerPassword}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </Panel>
             <Panel title="Company controls" description="Activate or deactivate companies without losing history.">
               <div className="grid gap-4 md:grid-cols-2">

@@ -29,6 +29,7 @@ import { createPortalId } from "@/lib/portal/ids";
 import { SESSION_COOKIE } from "@/lib/portal/session";
 import { getPortalBackendMode } from "@/lib/supabase/env";
 import type { LeavePolicy } from "@/lib/domain/types";
+import type { CreateCompanyActionState } from "@/lib/portal/action-states";
 import type { EmployeeDocumentRecord } from "@/lib/portal/types";
 
 function createId(_prefix: string) {
@@ -109,15 +110,34 @@ export async function logoutAction() {
   redirect("/login");
 }
 
-export async function createCompanyAction(formData: FormData) {
-  await createCompanyInBackend({
-    name: String(formData.get("name") ?? "New Client"),
-    clientCountry: String(formData.get("clientCountry") ?? "United States"),
-    contactName: String(formData.get("contactName") ?? "New Contact"),
-    contactEmail: String(formData.get("contactEmail") ?? "contact@example.com"),
-  });
+export async function createCompanyAction(formData: FormData): Promise<CreateCompanyActionState> {
+  try {
+    const createdCompany = await createCompanyInBackend({
+      name: String(formData.get("name") ?? "New Client"),
+      clientCountry: String(formData.get("clientCountry") ?? "United States"),
+      contactName: String(formData.get("contactName") ?? "New Contact"),
+      contactEmail: String(formData.get("contactEmail") ?? "contact@example.com").trim().toLowerCase(),
+      password: String(formData.get("password") ?? ""),
+    });
 
-  touchPortalPaths();
+    touchPortalPaths();
+
+    return {
+      status: "success",
+      message: `Employer login created for ${String(formData.get("name") ?? "New Client")}.`,
+      credentials: {
+        employerName: createdCompany.employerName,
+        employerEmail: createdCompany.employerEmail,
+        employerPassword: createdCompany.employerPassword,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create the employer login.";
+    return {
+      status: "error",
+      message,
+    };
+  }
 }
 
 export async function createAdminAction(formData: FormData) {

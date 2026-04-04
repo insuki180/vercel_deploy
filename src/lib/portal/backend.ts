@@ -396,22 +396,41 @@ export async function logoutFromSupabase() {
   return supabase.auth.signOut();
 }
 
+function generateTemporaryPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  const punctuation = "!@#$%";
+
+  const nextLetter = () => alphabet[Math.floor(Math.random() * alphabet.length)];
+  const nextDigit = () => digits[Math.floor(Math.random() * digits.length)];
+  const nextPunctuation = () => punctuation[Math.floor(Math.random() * punctuation.length)];
+
+  return `${nextLetter().toUpperCase()}${nextLetter().toLowerCase()}${nextLetter().toLowerCase()}${nextDigit()}${nextDigit()}${nextPunctuation()}${nextLetter().toLowerCase()}${nextLetter().toUpperCase()}`;
+}
+
 export async function createCompanyInBackend(input: {
   name: string;
   clientCountry: string;
   contactName: string;
   contactEmail: string;
+  password?: string;
   createdBy?: string;
 }) {
+  const employerPassword = input.password?.trim() || generateTemporaryPassword();
+
   if (
     getPortalBackendMode() === "demo" ||
     !hasSupabaseServiceRole({
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     })
   ) {
+    const companyId = createId("company");
+    const employerUserId = createId("user");
+    const employerProfileId = createId("employer");
+
     mutatePortalState((state) => {
       state.companies.unshift({
-        id: `company_${Math.random().toString(36).slice(2, 10)}`,
+        id: companyId,
         name: input.name,
         country: "India",
         clientCountry: input.clientCountry,
@@ -420,20 +439,87 @@ export async function createCompanyInBackend(input: {
         primaryContactName: input.contactName,
         primaryContactEmail: input.contactEmail,
       });
+
+      state.users.unshift({
+        id: employerUserId,
+        email: input.contactEmail,
+        password: employerPassword,
+        name: input.contactName,
+        role: "employer",
+        companyId,
+      });
+
+      state.employers.unshift({
+        id: employerProfileId,
+        companyId,
+        userId: employerUserId,
+        name: input.contactName,
+        title: "Primary contact",
+        phone: "",
+        status: "active",
+      });
     });
-    return;
+
+    return {
+      companyId,
+      employerUserId,
+      employerName: input.contactName,
+      employerEmail: input.contactEmail,
+      employerPassword,
+    };
   }
 
   const supabase = createSupabaseAdminClient();
-  await supabase.from("companies").insert({
-    name: input.name,
-    country: "India",
-    client_country: input.clientCountry,
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .insert({
+      name: input.name,
+      country: "India",
+      client_country: input.clientCountry,
+      status: "active",
+      created_by: input.createdBy,
+      primary_contact_name: input.contactName,
+      primary_contact_email: input.contactEmail,
+    })
+    .select("id")
+    .single();
+
+  if (companyError) {
+    throw companyError;
+  }
+
+  const authUser = await getOrCreateAuthUser(input.contactEmail, employerPassword, input.contactName);
+  const profilePayload = {
+    id: authUser.id,
+    role: "employer",
+    full_name: input.contactName,
+    company_id: safeString(company?.id),
+  };
+
+  const { error: profileError } = await supabase.from("profiles").upsert(profilePayload);
+  if (profileError) {
+    throw profileError;
+  }
+
+  const { error: companyUserError } = await supabase.from("company_users").upsert({
+    company_id: safeString(company?.id),
+    profile_id: authUser.id,
+    role: "employer_admin",
+    title: "Primary contact",
     status: "active",
-    created_by: input.createdBy,
-    primary_contact_name: input.contactName,
-    primary_contact_email: input.contactEmail,
   });
+
+  if (companyUserError) {
+    throw companyUserError;
+  }
+
+  return {
+    companyId: safeString(company?.id),
+    employerUserId: authUser.id,
+    employerName: input.contactName,
+    employerEmail: input.contactEmail,
+    employerPassword,
+  };
 }
 
 export async function createAdminInBackend(input: {

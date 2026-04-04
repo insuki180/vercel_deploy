@@ -143,7 +143,12 @@ export function AdminDashboard({
 
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <Panel title="Create company" description="Admins can add client companies and then activate or deactivate them later.">
-            <form action={createCompanyAction} className="grid gap-4">
+            <form
+              action={async (formData) => {
+                await createCompanyAction(formData);
+              }}
+              className="grid gap-4"
+            >
               <Input name="name" placeholder="Client company name" />
               <Input name="clientCountry" placeholder="Client country" />
               <Input name="contactName" placeholder="Primary contact name" />
