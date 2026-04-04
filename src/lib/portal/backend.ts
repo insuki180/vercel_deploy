@@ -549,6 +549,123 @@ export async function createAdminInBackend(input: {
   });
 }
 
+export async function resetPortalUserPasswordInBackend(input: {
+  targetRole: "admin" | "employer" | "employee";
+  targetId: string;
+}) {
+  const temporaryPassword = generateTemporaryPassword();
+
+  if (!ensureSupabaseWritable()) {
+    let matchedUser: PortalUser | undefined;
+
+    if (input.targetRole === "admin") {
+      matchedUser = getPortalState().users.find(
+        (entry) => entry.id === input.targetId && entry.role === "admin",
+      );
+    } else if (input.targetRole === "employee") {
+      matchedUser = getPortalState().users.find(
+        (entry) => entry.employeeId === input.targetId && entry.role === "employee",
+      );
+    } else {
+      matchedUser = getPortalState().users.find(
+        (entry) => entry.companyId === input.targetId && entry.role === "employer",
+      );
+    }
+
+    if (!matchedUser) {
+      throw new Error("The selected account could not be found.");
+    }
+
+    mutatePortalState((state) => {
+      const user = state.users.find((entry) => entry.id === matchedUser?.id);
+      if (user) {
+        user.password = temporaryPassword;
+      }
+    });
+
+    return {
+      accountRole: input.targetRole,
+      accountName: matchedUser.name,
+      accountEmail: matchedUser.email,
+      temporaryPassword,
+    };
+  }
+
+  const supabase = createSupabaseAdminClient();
+  let authUserId = "";
+  let accountName = "";
+  let accountEmail = "";
+
+  if (input.targetRole === "admin") {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("id", input.targetId)
+      .eq("role", "admin")
+      .single();
+
+    if (error || !profile) {
+      throw new Error("The selected admin account could not be found.");
+    }
+
+    authUserId = safeString(profile.id);
+    accountName = safeString(profile.full_name, "Admin");
+  } else if (input.targetRole === "employee") {
+    const { data: employee, error } = await supabase
+      .from("employees")
+      .select("id, user_id, full_name, work_email")
+      .eq("id", input.targetId)
+      .single();
+
+    if (error || !employee || !employee.user_id) {
+      throw new Error("The selected employee account could not be found.");
+    }
+
+    authUserId = safeString(employee.user_id);
+    accountName = safeString(employee.full_name, "Employee");
+    accountEmail = safeString(employee.work_email);
+  } else {
+    const { data: companyUser, error } = await supabase
+      .from("company_users")
+      .select("profile_id, profiles(full_name)")
+      .eq("company_id", input.targetId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !companyUser || !companyUser.profile_id) {
+      throw new Error("The selected employer account could not be found.");
+    }
+
+    authUserId = safeString(companyUser.profile_id);
+    const profileRecord = Array.isArray(companyUser.profiles)
+      ? companyUser.profiles[0]
+      : companyUser.profiles;
+    accountName = safeString((profileRecord as SupabaseRecord | null)?.full_name, "Employer");
+  }
+
+  const { data: userLookup, error: userLookupError } = await supabase.auth.admin.getUserById(authUserId);
+  if (userLookupError || !userLookup.user) {
+    throw new Error("The linked sign-in account could not be found.");
+  }
+
+  accountEmail = accountEmail || userLookup.user.email || "";
+
+  const { error: updateError } = await supabase.auth.admin.updateUserById(authUserId, {
+    password: temporaryPassword,
+  });
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return {
+    accountRole: input.targetRole,
+    accountName,
+    accountEmail,
+    temporaryPassword,
+  };
+}
+
 export async function toggleCompanyStatusInBackend(companyId: string) {
   if (!ensureSupabaseWritable()) {
     mutatePortalState((state) => {
@@ -630,7 +747,93 @@ export async function reviewHiringRequestInBackend(input: {
   leavePolicy: LeavePolicy;
 }) {
   if (!ensureSupabaseWritable()) {
-    return;
+    const request = getPortalState().hiringRequests.find((entry) => entry.id === input.hiringRequestId);
+    if (!request) {
+      return null;
+    }
+
+    const employeePassword = generateTemporaryPassword();
+    const employeeId = createId("employee");
+    const employeeUserId = createId("user");
+
+    mutatePortalState((state) => {
+      const mutableRequest = state.hiringRequests.find((entry) => entry.id === input.hiringRequestId);
+      if (!mutableRequest) {
+        return;
+      }
+
+      mutableRequest.reviewedAt = nowIso();
+      mutableRequest.leavePolicy = input.leavePolicy;
+
+      if (input.decision === "rejected") {
+        mutableRequest.status = "rejected";
+        return;
+      }
+
+      mutableRequest.status = "onboarding_open";
+      state.users.unshift({
+        id: employeeUserId,
+        email: mutableRequest.candidateEmail,
+        password: employeePassword,
+        name: mutableRequest.candidateName,
+        role: "employee",
+        companyId: mutableRequest.companyId,
+        employeeId,
+      });
+      state.employees.unshift({
+        id: employeeId,
+        companyId: mutableRequest.companyId,
+        userId: employeeUserId,
+        workEmail: mutableRequest.candidateEmail,
+        fullName: mutableRequest.candidateName,
+        phone: mutableRequest.candidatePhone,
+        designation: mutableRequest.designation,
+        contractType: mutableRequest.contractType,
+        workLocation: mutableRequest.workLocation,
+        country: "India",
+        salary: mutableRequest.proposedSalary,
+        currency: mutableRequest.currency,
+        joiningDate: mutableRequest.targetJoiningDate,
+        status: "pending_onboarding",
+        payrollReady: false,
+        leavePolicy: input.leavePolicy,
+      });
+      state.onboardingRequests.unshift({
+        id: createId("onboard"),
+        hiringRequestId: mutableRequest.id,
+        employeeId,
+        companyId: mutableRequest.companyId,
+        token: `login-${employeeId}`,
+        status: "pending",
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+        invitedAt: nowIso(),
+      });
+      state.leaveBalances.push(
+        ...buildEmployeeLeaveBalances({
+          employeeId,
+          policy: input.leavePolicy,
+        }),
+      );
+      state.lifecycleEvents.unshift({
+        id: createId("life"),
+        employeeId,
+        type: "hiring_request",
+        status: "approved",
+        createdAt: nowIso(),
+        detail: "Admin approved hiring request and created employee login credentials.",
+      });
+    });
+
+    if (input.decision === "rejected") {
+      return null;
+    }
+
+    return {
+      employeeId,
+      employeeName: request.candidateName,
+      employeeEmail: request.candidateEmail,
+      employeePassword,
+    };
   }
 
   const supabase = createSupabaseAdminClient();
@@ -654,12 +857,19 @@ export async function reviewHiringRequestInBackend(input: {
     .eq("id", input.hiringRequestId);
 
   if (input.decision === "rejected") {
-    return;
+    return null;
   }
 
   const employeeId = createId("employee");
+  const employeePassword = generateTemporaryPassword();
+  const authUser = await getOrCreateAuthUser(
+    safeString(request.candidate_email),
+    employeePassword,
+    safeString(request.candidate_name),
+  );
   await supabase.from("employees").insert({
     id: employeeId,
+    user_id: authUser.id,
     company_id: request.company_id,
     full_name: request.candidate_name,
     work_email: request.candidate_email,
@@ -675,11 +885,19 @@ export async function reviewHiringRequestInBackend(input: {
     joining_date: request.target_joining_date,
   });
 
+  await supabase.from("profiles").upsert({
+    id: authUser.id,
+    role: "employee",
+    full_name: safeString(request.candidate_name),
+    company_id: safeString(request.company_id),
+    employee_id: employeeId,
+  });
+
   await supabase.from("employee_onboarding_requests").insert({
     hiring_request_id: input.hiringRequestId,
     employee_id: employeeId,
     company_id: request.company_id,
-    token: `invite-${employeeId}`,
+    token: `login-${employeeId}`,
     status: "pending",
     expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
   });
@@ -706,8 +924,15 @@ export async function reviewHiringRequestInBackend(input: {
     employee_id: employeeId,
     event_type: "hiring_request",
     status: "approved",
-    detail: "Admin approved hiring request and opened onboarding.",
+    detail: "Admin approved hiring request and created employee login credentials.",
   });
+
+  return {
+    employeeId,
+    employeeName: safeString(request.candidate_name),
+    employeeEmail: safeString(request.candidate_email),
+    employeePassword,
+  };
 }
 
 async function getOrCreateAuthUser(email: string, password: string, fullName: string) {
@@ -733,10 +958,9 @@ async function getOrCreateAuthUser(email: string, password: string, fullName: st
 }
 
 export async function completeOnboardingInBackend(input: {
-  token: string;
+  employeeId: string;
   personalEmail: string;
   phone: string;
-  password: string;
   bankName: string;
   accountNumber: string;
   ifscCode: string;
@@ -754,7 +978,7 @@ export async function completeOnboardingInBackend(input: {
   const { data: onboarding } = await supabase
     .from("employee_onboarding_requests")
     .select("*, employees(*)")
-    .eq("token", input.token)
+    .eq("employee_id", input.employeeId)
     .single();
 
   if (!onboarding) {
@@ -762,24 +986,10 @@ export async function completeOnboardingInBackend(input: {
   }
 
   const employee = onboarding.employees as SupabaseRecord;
-  const authUser = await getOrCreateAuthUser(
-    safeString(employee.work_email),
-    input.password,
-    safeString(employee.full_name),
-  );
-
-  await supabase.from("profiles").upsert({
-    id: authUser.id,
-    role: "employee",
-    full_name: safeString(employee.full_name),
-    company_id: safeString(employee.company_id),
-    employee_id: safeString(employee.id),
-  });
 
   await supabase
     .from("employees")
     .update({
-      user_id: authUser.id,
       personal_email: input.personalEmail,
       phone: input.phone,
       status: "pending_verification",
@@ -814,7 +1024,7 @@ export async function completeOnboardingInBackend(input: {
       status: "submitted",
       completed_at: nowIso(),
     })
-    .eq("token", input.token);
+    .eq("employee_id", input.employeeId);
 
   await supabase.from("employee_lifecycle_events").insert({
     employee_id: safeString(employee.id),

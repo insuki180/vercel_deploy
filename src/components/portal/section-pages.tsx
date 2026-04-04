@@ -4,10 +4,12 @@ import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   approveEmployeeAction,
+  completeOnboardingAction,
   createAdminAction,
   createCompanyFormAction,
   createHiringRequestAction,
-  reviewHiringRequestAction,
+  resetUserPasswordAction,
+  reviewHiringRequestFormAction,
   reviewLeaveRequestAction,
   reviewResignationAction,
   runPayrollAction,
@@ -17,8 +19,16 @@ import {
   updateOffboardingStatusAction,
   uploadEmployeeDocumentAction,
 } from "@/lib/portal/actions";
-import { initialCreateCompanyActionState } from "@/lib/portal/action-states";
-import type { CreateCompanyActionState } from "@/lib/portal/action-states";
+import {
+  initialCreateCompanyActionState,
+  initialPasswordResetActionState,
+  initialReviewHiringActionState,
+} from "@/lib/portal/action-states";
+import type {
+  CreateCompanyActionState,
+  PasswordResetActionState,
+  ReviewHiringActionState,
+} from "@/lib/portal/action-states";
 import type {
   CompanyRecord,
   DashboardSummaryCard,
@@ -59,6 +69,32 @@ function MetricGrid({ metrics }: { metrics: DashboardSummaryCard[] }) {
   return metrics.map((metric) => (
     <MetricCard key={metric.label} label={metric.label} value={metric.value} hint={metric.hint} tone={metric.tone} />
   ));
+}
+
+function PasswordResetNotice({ state }: { state: PasswordResetActionState }) {
+  if (state.status === "idle") {
+    return null;
+  }
+
+  return (
+    <div
+      className={`rounded-[1.5rem] border p-4 text-sm ${
+        state.status === "success"
+          ? "border-emerald-200 bg-emerald-50/80"
+          : "border-rose-200 bg-rose-50/80"
+      }`}
+    >
+      <p className="font-semibold text-slate-950">{state.message}</p>
+      {state.credentials ? (
+        <div className="mt-3 grid gap-2 text-slate-700">
+          <p><span className="font-semibold text-slate-950">Role:</span> {state.credentials.accountRole}</p>
+          <p><span className="font-semibold text-slate-950">Name:</span> {state.credentials.accountName}</p>
+          <p><span className="font-semibold text-slate-950">Email:</span> {state.credentials.accountEmail}</p>
+          <p><span className="font-semibold text-slate-950">Temporary password:</span> {state.credentials.temporaryPassword}</p>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function EmployeeDetailContent({
@@ -161,6 +197,14 @@ export function AdminSectionPage({
   const [companyCreateState, companyCreateFormAction] = useActionState<CreateCompanyActionState, FormData>(
     createCompanyFormAction,
     initialCreateCompanyActionState,
+  );
+  const [hiringReviewState, hiringReviewFormAction] = useActionState<ReviewHiringActionState, FormData>(
+    reviewHiringRequestFormAction,
+    initialReviewHiringActionState,
+  );
+  const [passwordResetState, passwordResetFormAction] = useActionState<PasswordResetActionState, FormData>(
+    resetUserPasswordAction,
+    initialPasswordResetActionState,
   );
   const companyById = useMemo(() => getCompanyMap(state), [state]);
   const selectedEmployee = state.employees.find((employee) => employee.id === selectedEmployeeId);
@@ -320,6 +364,7 @@ export function AdminSectionPage({
               ) : null}
             </Panel>
             <Panel title="Employer directory" description="Manage employer status, primary contacts, and record details.">
+              <PasswordResetNotice state={passwordResetState} />
               <div className="grid gap-4 md:grid-cols-2">
                 {filteredEmployers.map((company) => (
                   <article
@@ -345,6 +390,16 @@ export function AdminSectionPage({
                       >
                         View employer
                       </button>
+                      <form action={passwordResetFormAction} className="flex-1" onClick={(event) => event.stopPropagation()}>
+                        <input type="hidden" name="targetRole" value="employer" />
+                        <input type="hidden" name="targetId" value={company.id} />
+                        <PendingSubmitButton
+                          idleLabel="Reset password"
+                          pendingLabel="Resetting..."
+                          variant="secondary"
+                          className="w-full"
+                        />
+                      </form>
                       <form action={toggleCompanyStatusAction.bind(null, company.id)} className="flex-1">
                         <PendingSubmitButton
                           idleLabel={company.status === "active" ? "Deactivate employer" : "Reactivate employer"}
@@ -363,6 +418,9 @@ export function AdminSectionPage({
 
         {section === "employees" ? (
           <Panel title="Employee records" description="Filter by person, employer, date, and status.">
+            <div className="mb-4">
+              <PasswordResetNotice state={passwordResetState} />
+            </div>
             <DataTable
               rows={filteredEmployees}
               emptyTitle="No employees match the current filters"
@@ -376,6 +434,17 @@ export function AdminSectionPage({
                 { key: "joiningDate", header: "Joining Date" },
                 { key: "status", header: "Status", render: (row) => <StatusBadge status={row.status} /> },
                 { key: "payrollReady", header: "Payroll", render: (row) => <Badge tone={row.payrollReady ? "emerald" : "amber"}>{row.payrollReady ? "Ready" : "Pending"}</Badge> },
+                {
+                  key: "actions",
+                  header: "Actions",
+                  render: (row) => (
+                    <form action={passwordResetFormAction} onClick={(event) => event.stopPropagation()}>
+                      <input type="hidden" name="targetRole" value="employee" />
+                      <input type="hidden" name="targetId" value={row.id} />
+                      <PendingSubmitButton idleLabel="Reset password" pendingLabel="Resetting..." variant="secondary" />
+                    </form>
+                  ),
+                },
               ]}
             />
           </Panel>
@@ -383,6 +452,24 @@ export function AdminSectionPage({
 
         {section === "hiring" ? (
           <Panel title="Hiring approvals" description="Review requests and finalize approved leave entitlements before onboarding opens.">
+            {hiringReviewState.status !== "idle" ? (
+              <div
+                className={`mb-4 rounded-[1.5rem] border p-4 text-sm ${
+                  hiringReviewState.status === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-rose-200 bg-rose-50 text-rose-800"
+                }`}
+              >
+                <p className="font-semibold text-slate-950">{hiringReviewState.message}</p>
+                {hiringReviewState.credentials ? (
+                  <div className="mt-2 space-y-1 text-slate-700">
+                    <p><span className="font-semibold text-slate-950">Employee:</span> {hiringReviewState.credentials.employeeName}</p>
+                    <p><span className="font-semibold text-slate-950">Email:</span> {hiringReviewState.credentials.employeeEmail}</p>
+                    <p><span className="font-semibold text-slate-950">Temporary password:</span> {hiringReviewState.credentials.employeePassword}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-4">
               {filteredHiring.map((request) => (
                 <article key={request.id} className="rounded-[1.75rem] border border-slate-100 bg-slate-50/70 p-5">
@@ -401,14 +488,16 @@ export function AdminSectionPage({
                   </div>
                   {request.status === "submitted" ? (
                     <div className="mt-4 grid gap-3 md:grid-cols-5">
-                      <form action={reviewHiringRequestAction.bind(null, request.id)} className="contents">
+                      <form action={hiringReviewFormAction} className="contents">
+                        <input type="hidden" name="hiringRequestId" value={request.id} />
                         <input type="hidden" name="decision" value="approved" />
                         <Input name="leaveCasual" defaultValue={request.leavePolicy.casual} />
                         <Input name="leaveSick" defaultValue={request.leavePolicy.sick} />
                         <Input name="leaveEarned" defaultValue={request.leavePolicy.earned} />
-                        <PendingSubmitButton idleLabel="Approve and open onboarding" pendingLabel="Approving..." />
+                        <PendingSubmitButton idleLabel="Approve and create login" pendingLabel="Approving..." />
                       </form>
-                      <form action={reviewHiringRequestAction.bind(null, request.id)}>
+                      <form action={hiringReviewFormAction}>
+                        <input type="hidden" name="hiringRequestId" value={request.id} />
                         <input type="hidden" name="decision" value="rejected" />
                         <input type="hidden" name="leaveCasual" value={String(request.leavePolicy.casual)} />
                         <input type="hidden" name="leaveSick" value={String(request.leavePolicy.sick)} />
@@ -596,6 +685,7 @@ export function AdminSectionPage({
               </form>
             </Panel>
             <Panel title="Current admins" description="All current admin profiles in the portal.">
+              <PasswordResetNotice state={passwordResetState} />
               <div className="space-y-3">
                 {state.users.filter((entry) => entry.role === "admin").map((admin) => (
                   <div key={admin.id} className="rounded-[1.35rem] border border-slate-100 bg-white p-4">
@@ -604,7 +694,14 @@ export function AdminSectionPage({
                         <p className="font-semibold text-slate-950">{admin.name}</p>
                         <p className="text-sm text-slate-500">{admin.email || "Email available after auth sync"}</p>
                       </div>
-                      <Badge tone="emerald">Admin</Badge>
+                      <div className="flex items-center gap-3">
+                        <Badge tone="emerald">Admin</Badge>
+                        <form action={passwordResetFormAction}>
+                          <input type="hidden" name="targetRole" value="admin" />
+                          <input type="hidden" name="targetId" value={admin.id} />
+                          <PendingSubmitButton idleLabel="Reset password" pendingLabel="Resetting..." variant="secondary" />
+                        </form>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -924,19 +1021,94 @@ export function EmployeeSectionPage({
       ) : null}
 
       {section === "onboarding" ? (
-        <Panel title="Onboarding status" description="Current onboarding and verification progress.">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-              <p className="font-semibold text-slate-950">Status</p>
-              <div className="mt-3"><StatusBadge status={onboarding?.status ?? employee.status} /></div>
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          {employee.status === "pending_onboarding" ? (
+            <Panel title="Complete onboarding" description="Finish payroll, bank, and compliance details to move into verification.">
+              <form className="grid gap-6" action={completeOnboardingAction.bind(null, employeeId)}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Personal email</span>
+                    <input name="personalEmail" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Phone</span>
+                    <input name="phone" defaultValue={employee.phone} className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Bank name</span>
+                    <input name="bankName" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Account number</span>
+                    <input name="accountNumber" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>IFSC code</span>
+                    <input name="ifscCode" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>PAN</span>
+                    <input name="pan" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Aadhaar last 4</span>
+                    <input name="aadhaarLast4" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>UAN</span>
+                    <input name="uan" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>ESI number</span>
+                    <input name="esiNumber" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>PAN file name</span>
+                    <input name="doc_PAN" defaultValue="pan-card.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Aadhaar file name</span>
+                    <input name="doc_Aadhaar" defaultValue="aadhaar.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-slate-700">
+                    <span>Bank proof file name</span>
+                    <input name="doc_Bank Proof" defaultValue="bank-proof.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                  </label>
+                </div>
+                <PendingSubmitButton idleLabel="Submit onboarding" pendingLabel="Submitting..." />
+              </form>
+            </Panel>
+          ) : (
+            <Panel title="Onboarding status" description="Current onboarding and verification progress.">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="font-semibold text-slate-950">Status</p>
+                  <div className="mt-3"><StatusBadge status={onboarding?.status ?? employee.status} /></div>
+                </div>
+                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="font-semibold text-slate-950">Timeline</p>
+                  <p className="mt-2 text-sm text-slate-500">Invited: {formatDate(onboarding?.invitedAt)}</p>
+                  <p className="text-sm text-slate-500">Submitted: {formatDate(onboarding?.completedAt)}</p>
+                </div>
+              </div>
+            </Panel>
+          )}
+          <Panel title="Offered leave policy" description="Your approved leave package once onboarding is completed.">
+            <div className="space-y-3">
+              {balances.map((entry) => (
+                <div key={entry.leaveType} className="rounded-2xl border border-slate-100 bg-white p-4 text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="font-semibold text-slate-950">{entry.leaveType}</p>
+                    <Badge tone="blue">{entry.allocated} allocated</Badge>
+                  </div>
+                  <p className="mt-2 text-slate-500">Used {entry.used} · Remaining {entry.remaining}</p>
+                </div>
+              ))}
             </div>
-            <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-              <p className="font-semibold text-slate-950">Timeline</p>
-              <p className="mt-2 text-sm text-slate-500">Invited: {formatDate(onboarding?.invitedAt)}</p>
-              <p className="text-sm text-slate-500">Submitted: {formatDate(onboarding?.completedAt)}</p>
-            </div>
-          </div>
-        </Panel>
+          </Panel>
+        </div>
       ) : null}
 
       {section === "profile" ? (

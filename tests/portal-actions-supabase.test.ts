@@ -13,6 +13,7 @@ const backendMocks = {
   toggleCompanyStatusInBackend: vi.fn(),
   createHiringRequestInBackend: vi.fn(),
   reviewHiringRequestInBackend: vi.fn(),
+  resetPortalUserPasswordInBackend: vi.fn(),
   completeOnboardingInBackend: vi.fn(),
   approveEmployeeInBackend: vi.fn(),
   uploadEmployeeDocumentInBackend: vi.fn(),
@@ -95,6 +96,40 @@ describe("portal actions in Supabase mode", () => {
     await loginAction(formData);
 
     expect(redirect).toHaveBeenCalledWith("/admin/overview");
+  });
+
+  it("redirects pending onboarding employees into the onboarding workspace", async () => {
+    const { loginAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("email", "pending.employee@globex.com");
+    formData.set("password", "Pending@123");
+
+    backendMocks.loginWithSupabase.mockResolvedValue({
+      error: null,
+      data: { user: { id: "employee_user_id", email: "pending.employee@globex.com" } },
+    });
+    backendMocks.getPortalSnapshot.mockResolvedValue({
+      users: [
+        {
+          id: "employee_user_id",
+          email: "",
+          password: "",
+          name: "Pending Employee",
+          role: "employee",
+          employeeId: "employee_1",
+        },
+      ],
+      employees: [
+        {
+          id: "employee_1",
+          status: "pending_onboarding",
+        },
+      ],
+    });
+
+    await loginAction(formData);
+
+    expect(redirect).toHaveBeenCalledWith("/employee/onboarding");
   });
 
   it("delegates admin creation to the backend adapter", async () => {
@@ -204,12 +239,72 @@ describe("portal actions in Supabase mode", () => {
     });
   });
 
+  it("returns employee credentials when hiring is approved", async () => {
+    const { reviewHiringRequestFormAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("decision", "approved");
+    formData.set("leaveCasual", "7");
+    formData.set("leaveSick", "9");
+    formData.set("leaveEarned", "14");
+
+    backendMocks.reviewHiringRequestInBackend.mockResolvedValue({
+      employeeId: "employee_1",
+      employeeName: "Asha Rao",
+      employeeEmail: "asha@example.com",
+      employeePassword: "Temp@12345",
+    });
+
+    formData.set("hiringRequestId", "hire_1");
+
+    const result = await reviewHiringRequestFormAction({ status: "idle" }, formData);
+
+    expect(result).toEqual({
+      status: "success",
+      message: "Employee login created for Asha Rao.",
+      credentials: {
+        employeeName: "Asha Rao",
+        employeeEmail: "asha@example.com",
+        employeePassword: "Temp@12345",
+      },
+    });
+  });
+
+  it("returns temporary credentials when an admin resets a user password", async () => {
+    const { resetUserPasswordAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("targetRole", "employee");
+    formData.set("targetId", "employee_1");
+
+    backendMocks.resetPortalUserPasswordInBackend.mockResolvedValue({
+      accountRole: "employee",
+      accountName: "Asha Rao",
+      accountEmail: "asha@example.com",
+      temporaryPassword: "NewTemp@123",
+    });
+
+    const result = await resetUserPasswordAction({ status: "idle" }, formData);
+
+    expect(backendMocks.resetPortalUserPasswordInBackend).toHaveBeenCalledWith({
+      targetRole: "employee",
+      targetId: "employee_1",
+    });
+    expect(result).toEqual({
+      status: "success",
+      message: "Temporary password reset for Asha Rao.",
+      credentials: {
+        accountRole: "employee",
+        accountName: "Asha Rao",
+        accountEmail: "asha@example.com",
+        temporaryPassword: "NewTemp@123",
+      },
+    });
+  });
+
   it("delegates onboarding completion to the backend adapter", async () => {
     const { completeOnboardingAction } = await import("@/lib/portal/actions");
     const formData = new FormData();
     formData.set("personalEmail", "asha.personal@example.com");
     formData.set("phone", "8888888888");
-    formData.set("password", "Employee@123");
     formData.set("bankName", "HDFC");
     formData.set("accountNumber", "123456789");
     formData.set("ifscCode", "HDFC0001");
@@ -221,13 +316,12 @@ describe("portal actions in Supabase mode", () => {
     formData.set("doc_Aadhaar", "aadhaar.pdf");
     formData.set("doc_Bank Proof", "bank-proof.pdf");
 
-    await completeOnboardingAction("token_1", formData);
+    await completeOnboardingAction("employee_1", formData);
 
     expect(backendMocks.completeOnboardingInBackend).toHaveBeenCalledWith({
-      token: "token_1",
+      employeeId: "employee_1",
       personalEmail: "asha.personal@example.com",
       phone: "8888888888",
-      password: "Employee@123",
       bankName: "HDFC",
       accountNumber: "123456789",
       ifscCode: "HDFC0001",
@@ -241,7 +335,7 @@ describe("portal actions in Supabase mode", () => {
         { type: "Bank Proof", fileName: "bank-proof.pdf" },
       ],
     });
-    expect(redirect).toHaveBeenCalledWith("/login?onboarding=submitted");
+    expect(redirect).toHaveBeenCalledWith("/employee/onboarding?submitted=1");
   });
 
   it("delegates employee approval and document upload to backend adapters", async () => {

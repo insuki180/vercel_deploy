@@ -69,3 +69,126 @@ test("employee can submit a leave request and access a payslip PDF", async ({ pa
   expect(pdfResponse.ok()).toBeTruthy();
   expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
 });
+
+test("approved hires receive employee login credentials and land in onboarding", async ({ page }) => {
+  const suffix = Date.now();
+  const candidateName = `Onboard User ${suffix}`;
+  const candidateEmail = `onboard+${suffix}@example.com`;
+
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("employer@globex.com");
+  await page.getByLabel("Password").fill("Employer@123");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/employer\/overview$/);
+  await page.locator("aside").getByRole("link", { name: "Hiring", exact: true }).click();
+  await expect(page).toHaveURL(/\/employer\/hiring$/);
+
+  await page.getByPlaceholder("Candidate full name").fill(candidateName);
+  await page.getByPlaceholder("Candidate work email").fill(candidateEmail);
+  await page.getByPlaceholder("Candidate phone").fill("+91 9876543210");
+  await page.getByPlaceholder("Designation").fill("Operations Associate");
+  await page.getByPlaceholder("Contract type").fill("Full-time");
+  await page.getByPlaceholder("Work location").fill("Remote");
+  await page.getByPlaceholder("Monthly salary (INR)").fill("65000");
+  await page.getByRole("button", { name: "Create hiring request" }).click();
+  await expect(page.getByText(candidateName)).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("admin@eor.com");
+  await page.getByLabel("Password").fill("Admin@123");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/admin\/overview$/);
+  await page.locator("aside").getByRole("link", { name: "Hiring", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/hiring$/);
+
+  await expect(page.getByText(candidateName)).toBeVisible();
+  await page.getByRole("button", { name: "Approve and create login" }).first().click();
+
+  await expect(page.getByText(`Employee login created for ${candidateName}.`)).toBeVisible();
+  const emailLine = page.getByText(new RegExp(`Email:\\s*${candidateEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  await expect(emailLine).toBeVisible();
+  const passwordText = await page
+    .locator("p")
+    .filter({ hasText: "Temporary password:" })
+    .first()
+    .textContent();
+  const employeePassword = passwordText?.split("Temporary password:")[1]?.trim();
+
+  expect(employeePassword).toBeTruthy();
+
+  await page.context().clearCookies();
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(candidateEmail);
+  await page.getByLabel("Password").fill(employeePassword!);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/employee\/onboarding$/);
+  await expect(page.getByRole("heading", { name: "Complete onboarding" })).toBeVisible();
+});
+
+test("admin can reset an employer password and the employer can sign in with it", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("admin@eor.com");
+  await page.getByLabel("Password").fill("Admin@123");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/admin\/overview$/);
+  await page.locator("aside").getByRole("link", { name: "Employers", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/employers$/);
+
+  const employerCard = page.locator("article").filter({ hasText: "employer@globex.com" }).first();
+  await employerCard.getByRole("button", { name: "Reset password" }).click();
+  await expect(page.getByText(/Temporary password reset for /)).toBeVisible();
+
+  const passwordText = await page
+    .locator("p")
+    .filter({ hasText: "Temporary password:" })
+    .first()
+    .textContent();
+  const employerPassword = passwordText?.split("Temporary password:")[1]?.trim();
+
+  expect(employerPassword).toBeTruthy();
+
+  await page.context().clearCookies();
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("employer@globex.com");
+  await page.getByLabel("Password").fill(employerPassword!);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/employer\/overview$/);
+});
+
+test("admin can reset an employee password and the employee can sign in with it", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("admin@eor.com");
+  await page.getByLabel("Password").fill("Admin@123");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/admin\/overview$/);
+  await page.locator("aside").getByRole("link", { name: "Employees", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/employees$/);
+
+  const employeeRow = page.locator("tr").filter({ hasText: "Priya Sharma" }).first();
+  await employeeRow.getByRole("button", { name: "Reset password" }).click();
+  await expect(page.getByText(/Temporary password reset for /)).toBeVisible();
+
+  const passwordText = await page
+    .locator("p")
+    .filter({ hasText: "Temporary password:" })
+    .first()
+    .textContent();
+  const employeePassword = passwordText?.split("Temporary password:")[1]?.trim();
+
+  expect(employeePassword).toBeTruthy();
+
+  await page.context().clearCookies();
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("employee@globex.com");
+  await page.getByLabel("Password").fill(employeePassword!);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page).toHaveURL(/\/employee\/overview$/);
+});

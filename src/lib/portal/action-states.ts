@@ -11,3 +11,32 @@ export type CreateCompanyActionState = {
 export const initialCreateCompanyActionState: CreateCompanyActionState = {
   status: "idle",
 };
+
+export type ReviewHiringActionState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+  credentials?: {
+    employeeName: string;
+    employeeEmail: string;
+    employeePassword: string;
+  };
+};
+
+export const initialReviewHiringActionState: ReviewHiringActionState = {
+  status: "idle",
+};
+
+export type PasswordResetActionState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+  credentials?: {
+    accountRole: "admin" | "employer" | "employee";
+    accountName: string;
+    accountEmail: string;
+    temporaryPassword: string;
+  };
+};
+
+export const initialPasswordResetActionState: PasswordResetActionState = {
+  status: "idle",
+};

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { EmployeeSectionPage } from "@/components/portal/section-pages";
 import { roleSectionGroups } from "@/components/portal/route-section";
 import { getDashboardMetrics, getScopedSelectors } from "@/lib/portal/selectors";
@@ -21,6 +21,10 @@ export default async function EmployeeSectionRoute({
 
   if (!scoped.employee) {
     notFound();
+  }
+
+  if (scoped.employee.status === "pending_onboarding" && section !== "onboarding") {
+    redirect("/employee/onboarding");
   }
 
   return <EmployeeSectionPage section={section} state={scoped.state} employeeId={scoped.employee.id} metrics={metrics} />;

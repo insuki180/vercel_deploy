@@ -12,6 +12,7 @@ import {
   createAdminInBackend,
   createCompanyInBackend,
   createHiringRequestInBackend,
+  resetPortalUserPasswordInBackend,
   loginWithSupabase,
   logoutFromSupabase,
   reviewHiringRequestInBackend,
@@ -29,8 +30,12 @@ import { createPortalId } from "@/lib/portal/ids";
 import { SESSION_COOKIE } from "@/lib/portal/session";
 import { getPortalBackendMode } from "@/lib/supabase/env";
 import type { LeavePolicy } from "@/lib/domain/types";
-import type { CreateCompanyActionState } from "@/lib/portal/action-states";
-import type { EmployeeDocumentRecord } from "@/lib/portal/types";
+import type {
+  CreateCompanyActionState,
+  PasswordResetActionState,
+  ReviewHiringActionState,
+} from "@/lib/portal/action-states";
+import type { EmployeeDocumentRecord, PortalState } from "@/lib/portal/types";
 
 function createId(_prefix: string) {
   void _prefix;
@@ -59,6 +64,27 @@ function touchPortalPaths(paths?: string[]) {
   targets.forEach((path) => revalidatePath(path));
 }
 
+function getEmployeeRedirectPath(
+  snapshot: PortalState,
+  userId: string | undefined,
+) {
+  const matchedUser = snapshot.users.find((entry) => entry.id === userId);
+  if (!matchedUser) {
+    return getDefaultRoleHref("employee");
+  }
+
+  if (matchedUser.role !== "employee") {
+    return getDefaultRoleHref(matchedUser.role);
+  }
+
+  const employee = snapshot.employees.find((entry) => entry.id === matchedUser.employeeId);
+  if (employee?.status === "pending_onboarding") {
+    return "/employee/onboarding";
+  }
+
+  return "/employee/overview";
+}
+
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "").trim();
@@ -72,8 +98,7 @@ export async function loginAction(formData: FormData) {
 
     const { getPortalSnapshot } = await import("@/lib/portal/backend");
     const snapshot = await getPortalSnapshot();
-    const matchedUser = snapshot.users.find((entry) => entry.id === data.user?.id);
-    redirect(getDefaultRoleHref(matchedUser?.role ?? "employee"));
+    redirect(getEmployeeRedirectPath(snapshot, data.user?.id));
     return;
   }
 
@@ -94,7 +119,7 @@ export async function loginAction(formData: FormData) {
     path: "/",
   });
 
-  redirect(getDefaultRoleHref(user.role));
+  redirect(getEmployeeRedirectPath(state, user.id));
 }
 
 export async function logoutAction() {
@@ -153,6 +178,46 @@ export async function createAdminAction(formData: FormData) {
   });
 
   touchPortalPaths();
+}
+
+export async function resetUserPasswordAction(
+  _previousState: PasswordResetActionState,
+  formData: FormData,
+): Promise<PasswordResetActionState> {
+  const targetRole = String(formData.get("targetRole") ?? "") as "admin" | "employer" | "employee";
+  const targetId = String(formData.get("targetId") ?? "");
+
+  if (!targetId || !["admin", "employer", "employee"].includes(targetRole)) {
+    return {
+      status: "error",
+      message: "The selected account is missing password reset details.",
+    };
+  }
+
+  try {
+    const result = await resetPortalUserPasswordInBackend({
+      targetRole,
+      targetId,
+    });
+
+    touchPortalPaths(["/", "/admin", "/admin/admins", "/admin/employers", "/admin/employees"]);
+
+    return {
+      status: "success",
+      message: `Temporary password reset for ${result.accountName}.`,
+      credentials: {
+        accountRole: result.accountRole,
+        accountName: result.accountName,
+        accountEmail: result.accountEmail,
+        temporaryPassword: result.temporaryPassword,
+      },
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Unable to reset the password.",
+    };
+  }
 }
 
 export async function toggleCompanyStatusAction(companyId: string) {
@@ -307,13 +372,53 @@ export async function reviewHiringRequestAction(hiringRequestId: string, formDat
   touchPortalPaths();
 }
 
-export async function completeOnboardingAction(token: string, formData: FormData) {
+export async function reviewHiringRequestFormAction(
+  _previousState: ReviewHiringActionState,
+  formData: FormData,
+): Promise<ReviewHiringActionState> {
+  const hiringRequestId = String(formData.get("hiringRequestId") ?? "");
+  const decision = String(formData.get("decision") ?? "approved") as "approved" | "rejected";
+  const leavePolicy = parseLeavePolicy(formData);
+
+  try {
+    const result = await reviewHiringRequestInBackend({
+      hiringRequestId,
+      decision,
+      leavePolicy,
+    });
+
+    touchPortalPaths();
+
+    if (decision === "approved" && result) {
+      return {
+        status: "success",
+        message: `Employee login created for ${result.employeeName}.`,
+        credentials: {
+          employeeName: result.employeeName,
+          employeeEmail: result.employeeEmail,
+          employeePassword: result.employeePassword,
+        },
+      };
+    }
+
+    return {
+      status: "success",
+      message: "Hiring request updated.",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Unable to review the hiring request.",
+    };
+  }
+}
+
+export async function completeOnboardingAction(employeeId: string, formData: FormData) {
   if (getPortalBackendMode() === "supabase") {
     await completeOnboardingInBackend({
-      token,
+      employeeId,
       personalEmail: String(formData.get("personalEmail") ?? ""),
       phone: String(formData.get("phone") ?? ""),
-      password: String(formData.get("password") ?? "Employee@123"),
       bankName: String(formData.get("bankName") ?? ""),
       accountNumber: String(formData.get("accountNumber") ?? ""),
       ifscCode: String(formData.get("ifscCode") ?? ""),
@@ -330,12 +435,12 @@ export async function completeOnboardingAction(token: string, formData: FormData
     });
 
     touchPortalPaths();
-    redirect("/login?onboarding=submitted");
+    redirect("/employee/onboarding?submitted=1");
     return;
   }
 
   mutatePortalState((state) => {
-    const onboarding = state.onboardingRequests.find((entry) => entry.token === token);
+    const onboarding = state.onboardingRequests.find((entry) => entry.employeeId === employeeId);
     if (!onboarding) {
       return;
     }
@@ -348,18 +453,6 @@ export async function completeOnboardingAction(token: string, formData: FormData
       return;
     }
 
-    const newUserId = createId("user");
-    state.users.push({
-      id: newUserId,
-      email: employee.workEmail,
-      password: String(formData.get("password") ?? "Employee@123"),
-      name: employee.fullName,
-      role: "employee",
-      companyId: employee.companyId,
-      employeeId: employee.id,
-    });
-
-    employee.userId = newUserId;
     employee.personalEmail = String(formData.get("personalEmail") ?? "");
     employee.phone = String(formData.get("phone") ?? employee.phone);
     employee.status = "pending_verification";
@@ -400,7 +493,7 @@ export async function completeOnboardingAction(token: string, formData: FormData
   });
 
   touchPortalPaths();
-  redirect("/login?onboarding=submitted");
+  redirect("/employee/onboarding?submitted=1");
 }
 
 export async function approveEmployeeAction(employeeId: string) {
