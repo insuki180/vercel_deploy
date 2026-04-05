@@ -357,7 +357,7 @@ export async function createHiringRequestAction(formData: FormData) {
       notes: String(formData.get("notes") ?? ""),
     });
 
-    touchPortalPaths(["/", "/admin", "/admin/hiring", "/employer", "/employer/hiring"]);
+    touchPortalPaths(["/admin/hiring", "/employer/hiring"]);
     redirect("/employer/hiring");
     return;
   }
@@ -484,7 +484,7 @@ export async function reviewHiringRequestFormAction(
       leavePolicy,
     });
 
-    touchPortalPaths();
+    touchPortalPaths(["/admin/hiring", "/admin/onboarding", "/admin/employees"]);
 
     if (decision === "approved" && result) {
       return {
