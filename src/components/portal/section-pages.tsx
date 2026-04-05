@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   approveEmployeeAction,
   changeOwnPasswordAction,
@@ -55,6 +56,8 @@ import {
   TextArea,
 } from "@/components/ui/portal-kit";
 
+const EMPLOYEE_PASSWORD_CHANGED_STORAGE_KEY = "portal_employee_password_changed";
+
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("en-IN", {
@@ -104,11 +107,36 @@ function PasswordChangePanel({
   state,
   formAction,
   mustChangePassword,
+  redirectAfterSuccessHref,
 }: {
   state: PasswordChangeActionState;
   formAction: (payload: FormData) => void;
   mustChangePassword?: boolean;
+  redirectAfterSuccessHref?: string;
 }) {
+  const router = useRouter();
+  const shouldRedirectToOnboarding = Boolean(redirectAfterSuccessHref);
+
+  useEffect(() => {
+    if (state.status !== "success" || !redirectAfterSuccessHref) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      router.push(redirectAfterSuccessHref);
+    }, 900);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [redirectAfterSuccessHref, router, state.status]);
+
+  useEffect(() => {
+    if (state.status !== "error" || !shouldRedirectToOnboarding) {
+      return;
+    }
+
+    window.sessionStorage.removeItem(EMPLOYEE_PASSWORD_CHANGED_STORAGE_KEY);
+  }, [shouldRedirectToOnboarding, state.status]);
+
   return (
     <Panel
       title="Change password"
@@ -118,7 +146,15 @@ function PasswordChangePanel({
           : "Update your current password at any time."
       }
     >
-      <form action={formAction} className="grid gap-4">
+      <form
+        action={formAction}
+        className="grid gap-4"
+        onSubmitCapture={() => {
+          if (shouldRedirectToOnboarding) {
+            window.sessionStorage.setItem(EMPLOYEE_PASSWORD_CHANGED_STORAGE_KEY, "1");
+          }
+        }}
+      >
         <Input type="password" name="currentPassword" placeholder="Current password" />
         <Input type="password" name="newPassword" placeholder="New password" />
         <Input type="password" name="confirmPassword" placeholder="Confirm new password" />
@@ -132,7 +168,21 @@ function PasswordChangePanel({
               : "border-rose-200 bg-rose-50/80 text-rose-800"
           }`}
         >
-          {state.message}
+          <p>{state.message}</p>
+          {state.status === "success" && redirectAfterSuccessHref ? (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-emerald-700">
+                Redirecting to onboarding next
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push(`${redirectAfterSuccessHref}#password-changed`)}
+                className="rounded-full border border-emerald-200 bg-white px-4 py-2 text-xs font-semibold text-emerald-900 transition hover:border-emerald-300"
+              >
+                Continue onboarding
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </Panel>
@@ -1094,6 +1144,20 @@ export function EmployeeSectionPage({
   const payslips = state.payslips.filter((entry) => entry.employeeId === employeeId);
   const resignations = state.resignations.filter((entry) => entry.employeeId === employeeId);
   const onboarding = state.onboardingRequests.find((entry) => entry.employeeId === employeeId);
+  const [showPasswordChangedBanner] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      (window.location.hash === "#password-changed" ||
+        window.sessionStorage.getItem(EMPLOYEE_PASSWORD_CHANGED_STORAGE_KEY) === "1"),
+  );
+
+  useEffect(() => {
+    if (!showPasswordChangedBanner) {
+      return;
+    }
+
+    window.sessionStorage.removeItem(EMPLOYEE_PASSWORD_CHANGED_STORAGE_KEY);
+  }, [showPasswordChangedBanner]);
 
   if (!employee) {
     return <EmptyState title="Employee not found" description="This workspace could not load the employee profile." />;
@@ -1125,79 +1189,86 @@ export function EmployeeSectionPage({
 
       {section === "onboarding" ? (
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-          {employee.status === "pending_onboarding" ? (
-            <Panel title="Complete onboarding" description="Finish payroll, bank, and compliance details to move into verification.">
-              <form className="grid gap-6" action={completeOnboardingAction.bind(null, employeeId)}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Personal email</span>
-                    <input name="personalEmail" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Phone</span>
-                    <input name="phone" defaultValue={employee.phone} className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Bank name</span>
-                    <input name="bankName" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Account number</span>
-                    <input name="accountNumber" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>IFSC code</span>
-                    <input name="ifscCode" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>PAN</span>
-                    <input name="pan" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Aadhaar last 4</span>
-                    <input name="aadhaarLast4" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>UAN</span>
-                    <input name="uan" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>ESI number</span>
-                    <input name="esiNumber" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>PAN file name</span>
-                    <input name="doc_PAN" defaultValue="pan-card.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Aadhaar file name</span>
-                    <input name="doc_Aadhaar" defaultValue="aadhaar.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium text-slate-700">
-                    <span>Bank proof file name</span>
-                    <input name="doc_Bank Proof" defaultValue="bank-proof.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
-                  </label>
-                </div>
-                <PendingSubmitButton idleLabel="Submit onboarding" pendingLabel="Submitting..." />
-              </form>
-            </Panel>
-          ) : (
-            <Panel title="Onboarding status" description="Current onboarding and verification progress.">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                  <p className="font-semibold text-slate-950">Status</p>
-                  <div className="mt-3"><StatusBadge status={onboarding?.status ?? employee.status} /></div>
-                </div>
-                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                  <p className="font-semibold text-slate-950">Timeline</p>
-                  <p className="mt-2 text-sm text-slate-500">Invited: {formatDate(onboarding?.invitedAt)}</p>
-                  <p className="text-sm text-slate-500">Submitted: {formatDate(onboarding?.completedAt)}</p>
-                </div>
+          <div className="grid gap-6">
+            {showPasswordChangedBanner ? (
+              <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+                <p className="font-semibold">Password updated. Continue onboarding.</p>
               </div>
-            </Panel>
-          )}
+            ) : null}
+            {employee.status === "pending_onboarding" ? (
+              <Panel title="Complete onboarding" description="Finish payroll, bank, and compliance details to move into verification.">
+                <form className="grid gap-6" action={completeOnboardingAction.bind(null, employeeId)}>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Personal email</span>
+                      <input name="personalEmail" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Phone</span>
+                      <input name="phone" defaultValue={employee.phone} className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Bank name</span>
+                      <input name="bankName" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Account number</span>
+                      <input name="accountNumber" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>IFSC code</span>
+                      <input name="ifscCode" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>PAN</span>
+                      <input name="pan" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Aadhaar last 4</span>
+                      <input name="aadhaarLast4" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>UAN</span>
+                      <input name="uan" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>ESI number</span>
+                      <input name="esiNumber" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>PAN file name</span>
+                      <input name="doc_PAN" defaultValue="pan-card.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Aadhaar file name</span>
+                      <input name="doc_Aadhaar" defaultValue="aadhaar.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-700">
+                      <span>Bank proof file name</span>
+                      <input name="doc_Bank Proof" defaultValue="bank-proof.pdf" className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
+                    </label>
+                  </div>
+                  <PendingSubmitButton idleLabel="Submit onboarding" pendingLabel="Submitting..." />
+                </form>
+              </Panel>
+            ) : (
+              <Panel title="Onboarding status" description="Current onboarding and verification progress.">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                    <p className="font-semibold text-slate-950">Status</p>
+                    <div className="mt-3"><StatusBadge status={onboarding?.status ?? employee.status} /></div>
+                  </div>
+                  <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                    <p className="font-semibold text-slate-950">Timeline</p>
+                    <p className="mt-2 text-sm text-slate-500">Invited: {formatDate(onboarding?.invitedAt)}</p>
+                    <p className="text-sm text-slate-500">Submitted: {formatDate(onboarding?.completedAt)}</p>
+                  </div>
+                </div>
+              </Panel>
+            )}
+          </div>
           <Panel title="Offered leave policy" description="Your approved leave package once onboarding is completed.">
             <div className="space-y-3">
               {balances.map((entry) => (
@@ -1370,6 +1441,11 @@ export function EmployeeSectionPage({
             state={passwordChangeState}
             formAction={passwordChangeFormAction}
             mustChangePassword={user.mustChangePassword}
+            redirectAfterSuccessHref={
+              user.mustChangePassword && employee.status === "pending_onboarding"
+                ? "/employee/onboarding"
+                : undefined
+            }
           />
           <Panel title="Settings" description="Account details for this workspace.">
             <div className="grid gap-4 md:grid-cols-2">

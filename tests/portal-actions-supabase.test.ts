@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const revalidatePath = vi.fn();
 const redirect = vi.fn();
+const cookieSet = vi.fn();
+const cookieDelete = vi.fn();
 const cookies = vi.fn(async () => ({
-  set: vi.fn(),
-  delete: vi.fn(),
+  set: cookieSet,
+  delete: cookieDelete,
 }));
 
 const backendMocks = {
@@ -25,6 +27,7 @@ const backendMocks = {
   reviewResignationInBackend: vi.fn(),
   updateOffboardingStatusInBackend: vi.fn(),
   getPortalSnapshot: vi.fn(),
+  getCurrentPortalUser: vi.fn(),
   loginWithSupabase: vi.fn(),
   logoutFromSupabase: vi.fn(),
 };
@@ -344,6 +347,11 @@ describe("portal actions in Supabase mode", () => {
     formData.set("confirmPassword", "Fresh@12345");
 
     backendMocks.changeOwnPasswordInBackend.mockResolvedValue(undefined);
+    backendMocks.getCurrentPortalUser.mockResolvedValue({
+      id: "admin_user_id",
+      role: "admin",
+      mustChangePassword: false,
+    });
 
     const result = await changeOwnPasswordAction({ status: "idle" }, formData);
 
@@ -351,6 +359,30 @@ describe("portal actions in Supabase mode", () => {
       currentPassword: "Temp@12345",
       newPassword: "Fresh@12345",
     });
+    expect(result).toEqual({
+      status: "success",
+      message: "Your password has been updated.",
+    });
+  });
+
+  it("keeps employee password changes on the settings action response for client-side onboarding handoff", async () => {
+    const { changeOwnPasswordAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("currentPassword", "Temp@12345");
+    formData.set("newPassword", "Fresh@12345");
+    formData.set("confirmPassword", "Fresh@12345");
+
+    backendMocks.getCurrentPortalUser.mockResolvedValue({
+      id: "employee_user_id",
+      role: "employee",
+      mustChangePassword: true,
+      employeeId: "employee_1",
+    });
+    backendMocks.changeOwnPasswordInBackend.mockResolvedValue(undefined);
+    const result = await changeOwnPasswordAction({ status: "idle" }, formData);
+
+    expect(cookieSet).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: "success",
       message: "Your password has been updated.",

@@ -34,9 +34,9 @@ test("employer can create a hiring request", async ({ page }) => {
   await page.getByPlaceholder("Candidate work email").fill("nisha@example.com");
   await page.getByPlaceholder("Candidate phone").fill("+91 9999988888");
   await page.getByPlaceholder("Designation").fill("HR Generalist");
-  await page.getByPlaceholder("Contract type").fill("Full-time");
-  await page.getByPlaceholder("Work location").fill("Remote");
-  await page.getByPlaceholder("Monthly salary (INR)").fill("70000");
+  await page.getByRole("combobox", { name: "Job type" }).selectOption("full-time");
+  await page.getByRole("combobox", { name: "Work location" }).selectOption("remote");
+  await page.getByPlaceholder("Monthly salary (USD)").fill("70000");
   await page.getByRole("button", { name: "Create hiring request" }).click();
 
   await expect(page.getByText("Nisha Kapoor")).toBeVisible();
@@ -88,9 +88,9 @@ test("approved hires receive employee login credentials and land in onboarding",
   await page.getByPlaceholder("Candidate work email").fill(candidateEmail);
   await page.getByPlaceholder("Candidate phone").fill("+91 9876543210");
   await page.getByPlaceholder("Designation").fill("Operations Associate");
-  await page.getByPlaceholder("Contract type").fill("Full-time");
-  await page.getByPlaceholder("Work location").fill("Remote");
-  await page.getByPlaceholder("Monthly salary (INR)").fill("65000");
+  await page.getByRole("combobox", { name: "Job type" }).selectOption("full-time");
+  await page.getByRole("combobox", { name: "Work location" }).selectOption("remote");
+  await page.getByPlaceholder("Monthly salary (USD)").fill("65000");
   await page.getByRole("button", { name: "Create hiring request" }).click();
   await expect(page.getByText(candidateName)).toBeVisible();
 
@@ -136,18 +136,8 @@ test("approved hires receive employee login credentials and land in onboarding",
       await page.getByRole("textbox", { name: "New password", exact: true }).fill("Onboarded@123");
       await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("Onboarded@123");
       await page.getByRole("button", { name: "Update password" }).click();
-      await Promise.race([
-        page.waitForURL(/\/employee\/onboarding$/, { timeout: 5000 }),
-        page.getByText("Your password has been updated.").waitFor({ state: "visible", timeout: 5000 }),
-      ]);
-
-      if (page.url().endsWith("/employee/settings")) {
-        await expect(page.getByText("Your password has been updated.")).toBeVisible();
-        await page.goto("/employee/overview");
-        await expect(page).toHaveURL(/\/employee\/onboarding$/);
-      } else {
-        await expect(page).toHaveURL(/\/employee\/onboarding$/);
-      }
+      await expect(page).toHaveURL(/\/employee\/onboarding(#password-changed)?$/);
+      await expect(page.getByText("Password updated. Continue onboarding.")).toBeVisible();
     } else {
       await page.goto("/employee/onboarding");
     }
