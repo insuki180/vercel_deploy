@@ -803,6 +803,7 @@ export function EmployerSectionPage({
 }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [teamSearch, setTeamSearch] = useState("");
+  const [workLocationType, setWorkLocationType] = useState("remote");
   const [passwordChangeState, passwordChangeFormAction] = useActionState<PasswordChangeActionState, FormData>(
     changeOwnPasswordAction,
     initialPasswordChangeActionState,
@@ -851,18 +852,50 @@ export function EmployerSectionPage({
               <form action={createHiringRequestAction} className="grid gap-4">
                 <input type="hidden" name="companyId" value={user.companyId} />
                 <input type="hidden" name="submittedByUserId" value={user.id} />
+                <input type="hidden" name="workLocationType" value={workLocationType} />
                 <div className="grid gap-4 md:grid-cols-2">
                   <Input name="candidateName" placeholder="Candidate full name" />
                   <Input name="candidateEmail" placeholder="Candidate work email" />
                   <Input name="candidatePhone" placeholder="Candidate phone" />
                   <Input name="designation" placeholder="Designation" />
-                  <Input name="contractType" placeholder="Contract type" />
-                  <Input name="workLocation" placeholder="Work location" />
+                  <div className="grid gap-2">
+                    <label htmlFor="contractType" className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                      Job type
+                    </label>
+                    <Select id="contractType" name="contractType" defaultValue="full-time">
+                      <option value="full-time">Full-time</option>
+                      <option value="part-time">Part-time</option>
+                      <option value="contract">Contract</option>
+                      <option value="freelance">Freelance</option>
+                      <option value="others">Others</option>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="workLocationType" className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                      Work location
+                    </label>
+                    <Select
+                      id="workLocationType"
+                      name="workLocationTypeVisible"
+                      value={workLocationType}
+                      onChange={(event) => setWorkLocationType(event.target.value)}
+                    >
+                      <option value="remote">Remote</option>
+                      <option value="office">Office</option>
+                    </Select>
+                  </div>
+                  {workLocationType === "office" ? (
+                    <Input name="officeLocation" placeholder="Office location" />
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
+                      Remote role selected. Office location is not required.
+                    </div>
+                  )}
                   <Input type="date" name="targetJoiningDate" />
-                  <Input type="number" name="proposedSalary" placeholder="Monthly salary (INR)" />
-                  <Input type="number" name="leaveCasual" placeholder="Casual leave" defaultValue={6} />
-                  <Input type="number" name="leaveSick" placeholder="Sick leave" defaultValue={8} />
-                  <Input type="number" name="leaveEarned" placeholder="Earned leave" defaultValue={12} />
+                  <Input type="number" name="proposedSalary" placeholder="Monthly salary (USD)" min="0" step="0.01" />
+                  <Input type="number" name="leaveCasual" placeholder="Casual leave days (e.g. 6)" defaultValue={6} min="0" />
+                  <Input type="number" name="leaveSick" placeholder="Sick leave days (e.g. 8)" defaultValue={8} min="0" />
+                  <Input type="number" name="leaveEarned" placeholder="Earned leave days (e.g. 12)" defaultValue={12} min="0" />
                 </div>
                 <TextArea name="notes" placeholder="Role notes, urgency, or approvals context" />
                 <PendingSubmitButton idleLabel="Create hiring request" pendingLabel="Creating..." />

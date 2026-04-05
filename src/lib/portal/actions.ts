@@ -61,6 +61,16 @@ function optionalFormString(formData: FormData, key: string) {
   return value || undefined;
 }
 
+function buildHiringWorkLocation(formData: FormData) {
+  const workLocationType = String(formData.get("workLocationType") ?? "remote").trim().toLowerCase();
+  if (workLocationType === "office") {
+    const officeLocation = optionalFormString(formData, "officeLocation");
+    return officeLocation ? `Office - ${officeLocation}` : "Office";
+  }
+
+  return "Remote";
+}
+
 function touchPortalPaths(paths?: string[]) {
   const targets = paths ?? ["/", "/admin", "/employer", "/employee"];
   targets.forEach((path) => revalidatePath(path));
@@ -339,6 +349,7 @@ export async function toggleCompanyStatusAction(companyId: string) {
 export async function createHiringRequestAction(formData: FormData) {
   const companyId = String(formData.get("companyId") ?? "");
   const submittedByUserId = String(formData.get("submittedByUserId") ?? "");
+  const workLocation = buildHiringWorkLocation(formData);
 
   if (getPortalBackendMode() === "supabase") {
     await createHiringRequestInBackend({
@@ -349,10 +360,10 @@ export async function createHiringRequestAction(formData: FormData) {
       candidatePhone: String(formData.get("candidatePhone") ?? ""),
       designation: String(formData.get("designation") ?? ""),
       contractType: String(formData.get("contractType") ?? ""),
-      workLocation: String(formData.get("workLocation") ?? ""),
+      workLocation,
       targetJoiningDate: optionalFormString(formData, "targetJoiningDate") ?? "",
       proposedSalary: Number(formData.get("proposedSalary") ?? 0),
-      currency: "INR",
+      currency: "USD",
       leavePolicy: parseLeavePolicy(formData),
       notes: String(formData.get("notes") ?? ""),
     });
@@ -372,10 +383,10 @@ export async function createHiringRequestAction(formData: FormData) {
       candidatePhone: String(formData.get("candidatePhone") ?? ""),
       designation: String(formData.get("designation") ?? ""),
       contractType: String(formData.get("contractType") ?? ""),
-      workLocation: String(formData.get("workLocation") ?? ""),
+      workLocation,
       targetJoiningDate: String(formData.get("targetJoiningDate") ?? ""),
       proposedSalary: Number(formData.get("proposedSalary") ?? 0),
-      currency: "INR",
+      currency: "USD",
       leavePolicy: parseLeavePolicy(formData),
       status: "submitted",
       notes: String(formData.get("notes") ?? ""),
