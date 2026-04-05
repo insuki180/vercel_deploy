@@ -495,8 +495,6 @@ export async function reviewHiringRequestFormAction(
       leavePolicy,
     });
 
-    touchPortalPaths(["/admin/hiring"]);
-
     if (decision === "approved" && result) {
       return {
         status: "success",
