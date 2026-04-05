@@ -14,6 +14,7 @@ const backendMocks = {
   createHiringRequestInBackend: vi.fn(),
   reviewHiringRequestInBackend: vi.fn(),
   resetPortalUserPasswordInBackend: vi.fn(),
+  changeOwnPasswordInBackend: vi.fn(),
   completeOnboardingInBackend: vi.fn(),
   approveEmployeeInBackend: vi.fn(),
   uploadEmployeeDocumentInBackend: vi.fn(),
@@ -130,6 +131,41 @@ describe("portal actions in Supabase mode", () => {
     await loginAction(formData);
 
     expect(redirect).toHaveBeenCalledWith("/employee/onboarding");
+  });
+
+  it("redirects users with temporary credentials to settings before their normal workspace", async () => {
+    const { loginAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("email", "pending.employee@globex.com");
+    formData.set("password", "Pending@123");
+
+    backendMocks.loginWithSupabase.mockResolvedValue({
+      error: null,
+      data: { user: { id: "employee_user_id", email: "pending.employee@globex.com" } },
+    });
+    backendMocks.getPortalSnapshot.mockResolvedValue({
+      users: [
+        {
+          id: "employee_user_id",
+          email: "",
+          password: "",
+          name: "Pending Employee",
+          role: "employee",
+          employeeId: "employee_1",
+          mustChangePassword: true,
+        },
+      ],
+      employees: [
+        {
+          id: "employee_1",
+          status: "pending_onboarding",
+        },
+      ],
+    });
+
+    await loginAction(formData);
+
+    expect(redirect).toHaveBeenCalledWith("/employee/settings");
   });
 
   it("delegates admin creation to the backend adapter", async () => {
@@ -297,6 +333,27 @@ describe("portal actions in Supabase mode", () => {
         accountEmail: "asha@example.com",
         temporaryPassword: "NewTemp@123",
       },
+    });
+  });
+
+  it("delegates self-service password changes and returns a success state", async () => {
+    const { changeOwnPasswordAction } = await import("@/lib/portal/actions");
+    const formData = new FormData();
+    formData.set("currentPassword", "Temp@12345");
+    formData.set("newPassword", "Fresh@12345");
+    formData.set("confirmPassword", "Fresh@12345");
+
+    backendMocks.changeOwnPasswordInBackend.mockResolvedValue(undefined);
+
+    const result = await changeOwnPasswordAction({ status: "idle" }, formData);
+
+    expect(backendMocks.changeOwnPasswordInBackend).toHaveBeenCalledWith({
+      currentPassword: "Temp@12345",
+      newPassword: "Fresh@12345",
+    });
+    expect(result).toEqual({
+      status: "success",
+      message: "Your password has been updated.",
     });
   });
 

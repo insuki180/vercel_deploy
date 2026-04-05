@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { EmployerSectionPage } from "@/components/portal/section-pages";
 import { roleSectionGroups } from "@/components/portal/route-section";
 import { getDashboardMetrics, getScopedSelectors } from "@/lib/portal/selectors";
@@ -16,6 +16,9 @@ export default async function EmployerSectionRoute({
   }
 
   const user = await requireRole("employer");
+  if (user.mustChangePassword && section !== "settings") {
+    redirect("/employer/settings");
+  }
   const scoped = await getScopedSelectors(user);
   const metrics = await getDashboardMetrics("employer", user);
 

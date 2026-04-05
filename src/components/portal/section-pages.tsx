@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   approveEmployeeAction,
+  changeOwnPasswordAction,
   completeOnboardingAction,
   createAdminAction,
   createCompanyFormAction,
@@ -21,11 +22,13 @@ import {
 } from "@/lib/portal/actions";
 import {
   initialCreateCompanyActionState,
+  initialPasswordChangeActionState,
   initialPasswordResetActionState,
   initialReviewHiringActionState,
 } from "@/lib/portal/action-states";
 import type {
   CreateCompanyActionState,
+  PasswordChangeActionState,
   PasswordResetActionState,
   ReviewHiringActionState,
 } from "@/lib/portal/action-states";
@@ -94,6 +97,45 @@ function PasswordResetNotice({ state }: { state: PasswordResetActionState }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function PasswordChangePanel({
+  state,
+  formAction,
+  mustChangePassword,
+}: {
+  state: PasswordChangeActionState;
+  formAction: (payload: FormData) => void;
+  mustChangePassword?: boolean;
+}) {
+  return (
+    <Panel
+      title="Change password"
+      description={
+        mustChangePassword
+          ? "You must change your temporary password before continuing."
+          : "Update your current password at any time."
+      }
+    >
+      <form action={formAction} className="grid gap-4">
+        <Input type="password" name="currentPassword" placeholder="Current password" />
+        <Input type="password" name="newPassword" placeholder="New password" />
+        <Input type="password" name="confirmPassword" placeholder="Confirm new password" />
+        <PendingSubmitButton idleLabel="Update password" pendingLabel="Updating..." />
+      </form>
+      {state.status !== "idle" ? (
+        <div
+          className={`mt-4 rounded-[1.35rem] border p-4 text-sm ${
+            state.status === "success"
+              ? "border-emerald-200 bg-emerald-50/80 text-emerald-800"
+              : "border-rose-200 bg-rose-50/80 text-rose-800"
+          }`}
+        >
+          {state.message}
+        </div>
+      ) : null}
+    </Panel>
   );
 }
 
@@ -205,6 +247,10 @@ export function AdminSectionPage({
   const [passwordResetState, passwordResetFormAction] = useActionState<PasswordResetActionState, FormData>(
     resetUserPasswordAction,
     initialPasswordResetActionState,
+  );
+  const [passwordChangeState, passwordChangeFormAction] = useActionState<PasswordChangeActionState, FormData>(
+    changeOwnPasswordAction,
+    initialPasswordChangeActionState,
   );
   const companyById = useMemo(() => getCompanyMap(state), [state]);
   const selectedEmployee = state.employees.find((employee) => employee.id === selectedEmployeeId);
@@ -711,19 +757,26 @@ export function AdminSectionPage({
         ) : null}
 
         {section === "settings" ? (
-          <Panel title="Settings" description="Workspace settings and account information.">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                <p className="font-semibold text-slate-950">Signed in as</p>
-                <p className="mt-2 text-sm text-slate-500">{user.name}</p>
-                <p className="text-sm text-slate-500">{user.email}</p>
+          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+            <PasswordChangePanel
+              state={passwordChangeState}
+              formAction={passwordChangeFormAction}
+              mustChangePassword={user.mustChangePassword}
+            />
+            <Panel title="Settings" description="Workspace settings and account information.">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="font-semibold text-slate-950">Signed in as</p>
+                  <p className="mt-2 text-sm text-slate-500">{user.name}</p>
+                  <p className="text-sm text-slate-500">{user.email}</p>
+                </div>
+                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="font-semibold text-slate-950">Permissions</p>
+                  <p className="mt-2 text-sm text-slate-500">This role can manage employers, approvals, payroll, and lifecycle operations.</p>
+                </div>
               </div>
-              <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                <p className="font-semibold text-slate-950">Permissions</p>
-                <p className="mt-2 text-sm text-slate-500">This role can manage employers, approvals, payroll, and lifecycle operations.</p>
-              </div>
-            </div>
-          </Panel>
+            </Panel>
+          </div>
         ) : null}
       </PortalPage>
 
@@ -750,6 +803,10 @@ export function EmployerSectionPage({
 }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [teamSearch, setTeamSearch] = useState("");
+  const [passwordChangeState, passwordChangeFormAction] = useActionState<PasswordChangeActionState, FormData>(
+    changeOwnPasswordAction,
+    initialPasswordChangeActionState,
+  );
   const company = state.companies[0];
   const selectedEmployee = state.employees.find((employee) => employee.id === selectedEmployeeId);
   const filteredTeam = useMemo(
@@ -949,20 +1006,27 @@ export function EmployerSectionPage({
         ) : null}
 
         {section === "settings" ? (
-          <Panel title="Settings" description="Account and employer context for this workspace.">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                <p className="font-semibold text-slate-950">Employer</p>
-                <p className="mt-2 text-sm text-slate-500">{company?.name ?? "-"}</p>
-                <p className="text-sm text-slate-500">{company?.status ?? "-"}</p>
+          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+            <PasswordChangePanel
+              state={passwordChangeState}
+              formAction={passwordChangeFormAction}
+              mustChangePassword={user.mustChangePassword}
+            />
+            <Panel title="Settings" description="Account and employer context for this workspace.">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="font-semibold text-slate-950">Employer</p>
+                  <p className="mt-2 text-sm text-slate-500">{company?.name ?? "-"}</p>
+                  <p className="text-sm text-slate-500">{company?.status ?? "-"}</p>
+                </div>
+                <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="font-semibold text-slate-950">Signed in as</p>
+                  <p className="mt-2 text-sm text-slate-500">{user.name}</p>
+                  <p className="text-sm text-slate-500">{user.email}</p>
+                </div>
               </div>
-              <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-                <p className="font-semibold text-slate-950">Signed in as</p>
-                <p className="mt-2 text-sm text-slate-500">{user.name}</p>
-                <p className="text-sm text-slate-500">{user.email}</p>
-              </div>
-            </div>
-          </Panel>
+            </Panel>
+          </div>
         ) : null}
       </PortalPage>
 
@@ -976,14 +1040,20 @@ export function EmployerSectionPage({
 export function EmployeeSectionPage({
   section,
   state,
+  user,
   employeeId,
   metrics,
 }: {
   section: string;
   state: PortalState;
+  user: PortalUser;
   employeeId: string;
   metrics: DashboardSummaryCard[];
 }) {
+  const [passwordChangeState, passwordChangeFormAction] = useActionState<PasswordChangeActionState, FormData>(
+    changeOwnPasswordAction,
+    initialPasswordChangeActionState,
+  );
   const employee = state.employees.find((entry) => entry.id === employeeId);
   const balances = state.leaveBalances.filter((entry) => entry.employeeId === employeeId);
   const leaveRequests = state.leaveRequests.filter((entry) => entry.employeeId === employeeId);
@@ -1262,13 +1332,27 @@ export function EmployeeSectionPage({
       ) : null}
 
       {section === "settings" ? (
-        <Panel title="Settings" description="Account details for this workspace.">
-          <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
-            <p className="font-semibold text-slate-950">{employee.fullName}</p>
-            <p className="mt-2 text-sm text-slate-500">{employee.workEmail}</p>
-            <p className="text-sm text-slate-500">{employee.status.replaceAll("_", " ")}</p>
-          </div>
-        </Panel>
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <PasswordChangePanel
+            state={passwordChangeState}
+            formAction={passwordChangeFormAction}
+            mustChangePassword={user.mustChangePassword}
+          />
+          <Panel title="Settings" description="Account details for this workspace.">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                <p className="font-semibold text-slate-950">{employee.fullName}</p>
+                <p className="mt-2 text-sm text-slate-500">{employee.workEmail}</p>
+                <p className="text-sm text-slate-500">{employee.status.replaceAll("_", " ")}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-slate-100 bg-slate-50/70 p-4">
+                <p className="font-semibold text-slate-950">Account access</p>
+                <p className="mt-2 text-sm text-slate-500">{user.name}</p>
+                <p className="text-sm text-slate-500">{user.email}</p>
+              </div>
+            </div>
+          </Panel>
+        </div>
       ) : null}
     </PortalPage>
   );

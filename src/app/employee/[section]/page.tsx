@@ -16,6 +16,9 @@ export default async function EmployeeSectionRoute({
   }
 
   const user = await requireRole("employee");
+  if (user.mustChangePassword && section !== "settings") {
+    redirect("/employee/settings");
+  }
   const scoped = await getScopedSelectors(user);
   const metrics = await getDashboardMetrics("employee", user);
 
@@ -27,5 +30,13 @@ export default async function EmployeeSectionRoute({
     redirect("/employee/onboarding");
   }
 
-  return <EmployeeSectionPage section={section} state={scoped.state} employeeId={scoped.employee.id} metrics={metrics} />;
+  return (
+    <EmployeeSectionPage
+      section={section}
+      state={scoped.state}
+      user={user}
+      employeeId={scoped.employee.id}
+      metrics={metrics}
+    />
+  );
 }

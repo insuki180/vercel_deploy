@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createClient } from "@supabase/supabase-js";
 import { buildEmployeeLeaveBalances, evaluateLeaveRequest, settleApprovedLeave } from "@/lib/domain/leave";
 import { calculatePayrollRecord } from "@/lib/domain/payroll";
 import { getPortalState, mutatePortalState } from "@/lib/portal/demo-store";
@@ -16,7 +17,7 @@ import type {
   PortalUser,
   ResignationRecord,
 } from "@/lib/portal/types";
-import { getPortalBackendMode, hasSupabaseServiceRole } from "@/lib/supabase/env";
+import { getPortalBackendMode, getSupabasePublicEnv, hasSupabaseServiceRole } from "@/lib/supabase/env";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import type { LeavePolicy } from "@/lib/domain/types";
 
@@ -59,6 +60,7 @@ function mapUsers(rows: SupabaseRecord[], authEmails = new Map<string, string>()
     role: toPortalRole(row.role),
     companyId: safeString(row.company_id) || undefined,
     employeeId: safeString(row.employee_id) || undefined,
+    mustChangePassword: Boolean(row.must_change_password),
   }));
 }
 
@@ -447,6 +449,7 @@ export async function createCompanyInBackend(input: {
         name: input.contactName,
         role: "employer",
         companyId,
+        mustChangePassword: true,
       });
 
       state.employers.unshift({
@@ -494,6 +497,7 @@ export async function createCompanyInBackend(input: {
     role: "employer",
     full_name: input.contactName,
     company_id: safeString(company?.id),
+    must_change_password: true,
   };
 
   const { error: profileError } = await supabase.from("profiles").upsert(profilePayload);
@@ -535,6 +539,7 @@ export async function createAdminInBackend(input: {
         password: input.password,
         name: input.fullName,
         role: "admin",
+        mustChangePassword: true,
       });
     });
     return;
@@ -546,6 +551,7 @@ export async function createAdminInBackend(input: {
     id: authUser.id,
     role: "admin",
     full_name: input.fullName,
+    must_change_password: true,
   });
 }
 
@@ -580,6 +586,7 @@ export async function resetPortalUserPasswordInBackend(input: {
       const user = state.users.find((entry) => entry.id === matchedUser?.id);
       if (user) {
         user.password = temporaryPassword;
+        user.mustChangePassword = true;
       }
     });
 
@@ -613,17 +620,55 @@ export async function resetPortalUserPasswordInBackend(input: {
   } else if (input.targetRole === "employee") {
     const { data: employee, error } = await supabase
       .from("employees")
-      .select("id, user_id, full_name, work_email")
+      .select("id, user_id, full_name, work_email, company_id")
       .eq("id", input.targetId)
       .single();
 
-    if (error || !employee || !employee.user_id) {
+    if (error || !employee) {
       throw new Error("The selected employee account could not be found.");
     }
 
-    authUserId = safeString(employee.user_id);
+    const employeeEmail = safeString(employee.work_email);
+    if (!employeeEmail) {
+      throw new Error("The selected employee does not have a work email for login recovery.");
+    }
+
+    let employeeUserId = safeString(employee.user_id);
+    if (!employeeUserId) {
+      const authUser = await getOrCreateAuthUser(
+        employeeEmail,
+        temporaryPassword,
+        safeString(employee.full_name, "Employee"),
+      );
+
+      employeeUserId = authUser.id;
+
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: authUser.id,
+        role: "employee",
+        full_name: safeString(employee.full_name),
+        company_id: safeString(employee.company_id),
+        employee_id: safeString(employee.id),
+        must_change_password: true,
+      });
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      const { error: employeeUpdateError } = await supabase
+        .from("employees")
+        .update({ user_id: authUser.id })
+        .eq("id", safeString(employee.id));
+
+      if (employeeUpdateError) {
+        throw employeeUpdateError;
+      }
+    }
+
+    authUserId = employeeUserId;
     accountName = safeString(employee.full_name, "Employee");
-    accountEmail = safeString(employee.work_email);
+    accountEmail = employeeEmail;
   } else {
     const { data: companyUser, error } = await supabase
       .from("company_users")
@@ -658,12 +703,73 @@ export async function resetPortalUserPasswordInBackend(input: {
     throw updateError;
   }
 
+  const { error: mustChangeError } = await supabase
+    .from("profiles")
+    .update({ must_change_password: true })
+    .eq("id", authUserId);
+
+  if (mustChangeError) {
+    throw mustChangeError;
+  }
+
   return {
     accountRole: input.targetRole,
     accountName,
     accountEmail,
     temporaryPassword,
   };
+}
+
+export async function changeOwnPasswordInBackend(input: {
+  currentPassword: string;
+  newPassword: string;
+}) {
+  if (!ensureSupabaseWritable()) {
+    return;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) {
+    throw new Error("You must be signed in to change your password.");
+  }
+
+  const { url, anonKey } = getSupabasePublicEnv();
+  const verificationClient = createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  const { error: verificationError } = await verificationClient.auth.signInWithPassword({
+    email: user.email,
+    password: input.currentPassword,
+  });
+
+  if (verificationError) {
+    throw new Error("Your current password is incorrect.");
+  }
+
+  const { error: passwordError } = await supabase.auth.updateUser({
+    password: input.newPassword,
+  });
+
+  if (passwordError) {
+    throw passwordError;
+  }
+
+  const { error: profileError } = await createSupabaseAdminClient()
+    .from("profiles")
+    .update({ must_change_password: false })
+    .eq("id", user.id);
+
+  if (profileError) {
+    throw profileError;
+  }
 }
 
 export async function toggleCompanyStatusInBackend(companyId: string) {
@@ -779,6 +885,7 @@ export async function reviewHiringRequestInBackend(input: {
         role: "employee",
         companyId: mutableRequest.companyId,
         employeeId,
+        mustChangePassword: true,
       });
       state.employees.unshift({
         id: employeeId,
@@ -891,6 +998,7 @@ export async function reviewHiringRequestInBackend(input: {
     full_name: safeString(request.candidate_name),
     company_id: safeString(request.company_id),
     employee_id: employeeId,
+    must_change_password: true,
   });
 
   await supabase.from("employee_onboarding_requests").insert({

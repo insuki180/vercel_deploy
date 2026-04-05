@@ -19,6 +19,9 @@ export default async function AdminSectionRoute({
   }
 
   const user = await requireRole("admin");
+  if (user.mustChangePassword && section !== "settings") {
+    redirect("/admin/settings");
+  }
   const scoped = await getScopedSelectors(user);
   const metrics = await getDashboardMetrics("admin", user);
 

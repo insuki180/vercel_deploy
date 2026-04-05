@@ -14,6 +14,7 @@ function createInitialState(): PortalState {
         password: "Admin@123",
         name: "Aarav Admin",
         role: "admin",
+        mustChangePassword: false,
       },
       {
         id: "user_employer_1",
@@ -22,6 +23,7 @@ function createInitialState(): PortalState {
         name: "Morgan Employer",
         role: "employer",
         companyId: "company_1",
+        mustChangePassword: false,
       },
       {
         id: "user_employee_1",
@@ -31,6 +33,7 @@ function createInitialState(): PortalState {
         role: "employee",
         companyId: "company_1",
         employeeId: "employee_1",
+        mustChangePassword: false,
       },
     ],
     companies: [

@@ -8,6 +8,7 @@ import { buildEmployeeLeaveBalances, evaluateLeaveRequest, settleApprovedLeave }
 import { getDefaultRoleHref } from "@/components/portal/route-section";
 import {
   approveEmployeeInBackend,
+  changeOwnPasswordInBackend,
   completeOnboardingInBackend,
   createAdminInBackend,
   createCompanyInBackend,
@@ -33,6 +34,7 @@ import type { LeavePolicy } from "@/lib/domain/types";
 import type {
   CreateCompanyActionState,
   PasswordResetActionState,
+  PasswordChangeActionState,
   ReviewHiringActionState,
 } from "@/lib/portal/action-states";
 import type { EmployeeDocumentRecord, PortalState } from "@/lib/portal/types";
@@ -64,6 +66,14 @@ function touchPortalPaths(paths?: string[]) {
   targets.forEach((path) => revalidatePath(path));
 }
 
+function getSettingsHref(role: PortalState["users"][number]["role"]) {
+  return role === "admin"
+    ? "/admin/settings"
+    : role === "employer"
+      ? "/employer/settings"
+      : "/employee/settings";
+}
+
 function getEmployeeRedirectPath(
   snapshot: PortalState,
   userId: string | undefined,
@@ -74,7 +84,13 @@ function getEmployeeRedirectPath(
   }
 
   if (matchedUser.role !== "employee") {
-    return getDefaultRoleHref(matchedUser.role);
+    return matchedUser.mustChangePassword
+      ? getSettingsHref(matchedUser.role)
+      : getDefaultRoleHref(matchedUser.role);
+  }
+
+  if (matchedUser.mustChangePassword) {
+    return "/employee/settings";
   }
 
   const employee = snapshot.employees.find((entry) => entry.id === matchedUser.employeeId);
@@ -218,6 +234,87 @@ export async function resetUserPasswordAction(
       message: error instanceof Error ? error.message : "Unable to reset the password.",
     };
   }
+}
+
+export async function changeOwnPasswordAction(
+  _previousState: PasswordChangeActionState,
+  formData: FormData,
+): Promise<PasswordChangeActionState> {
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return {
+      status: "error",
+      message: "Fill in your current password and the new password fields.",
+    };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return {
+      status: "error",
+      message: "New password and confirm password must match.",
+    };
+  }
+
+  if (newPassword.length < 8) {
+    return {
+      status: "error",
+      message: "New password must be at least 8 characters long.",
+    };
+  }
+
+  if (getPortalBackendMode() === "supabase") {
+    try {
+      await changeOwnPasswordInBackend({
+        currentPassword,
+        newPassword,
+      });
+
+      touchPortalPaths();
+
+      return {
+        status: "success",
+        message: "Your password has been updated.",
+      };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Unable to change your password.",
+      };
+    }
+  }
+
+  const user = await import("@/lib/portal/session").then((module) => module.getCurrentUser());
+  if (!user) {
+    return {
+      status: "error",
+      message: "You must be signed in to change your password.",
+    };
+  }
+
+  if (user.password !== currentPassword) {
+    return {
+      status: "error",
+      message: "Your current password is incorrect.",
+    };
+  }
+
+  mutatePortalState((state) => {
+    const matchedUser = state.users.find((entry) => entry.id === user.id);
+    if (matchedUser) {
+      matchedUser.password = newPassword;
+      matchedUser.mustChangePassword = false;
+    }
+  });
+
+  touchPortalPaths();
+
+  return {
+    status: "success",
+    message: "Your password has been updated.",
+  };
 }
 
 export async function toggleCompanyStatusAction(companyId: string) {

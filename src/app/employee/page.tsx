@@ -4,6 +4,9 @@ import { requireRole } from "@/lib/portal/session";
 
 export default async function EmployeeIndexPage() {
   const user = await requireRole("employee");
+  if (user.mustChangePassword) {
+    redirect("/employee/settings");
+  }
   const scoped = await getScopedSelectors(user);
 
   if (scoped.employee?.status === "pending_onboarding") {

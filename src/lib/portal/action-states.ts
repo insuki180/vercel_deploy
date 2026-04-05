@@ -40,3 +40,12 @@ export type PasswordResetActionState = {
 export const initialPasswordResetActionState: PasswordResetActionState = {
   status: "idle",
 };
+
+export type PasswordChangeActionState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+};
+
+export const initialPasswordChangeActionState: PasswordChangeActionState = {
+  status: "idle",
+};

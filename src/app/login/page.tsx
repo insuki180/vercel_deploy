@@ -2,12 +2,6 @@ import { ShieldCheck } from "lucide-react";
 import { PendingSubmitButton } from "@/components/ui/portal-kit";
 import { loginAction } from "@/lib/portal/actions";
 
-const demoAccounts = [
-  { role: "Admin", email: "admin@eor.com", password: "Admin@123" },
-  { role: "Employer", email: "employer@globex.com", password: "Employer@123" },
-  { role: "Employee", email: "employee@globex.com", password: "Employee@123" },
-];
-
 export default async function LoginPage({
   searchParams,
 }: {
@@ -30,17 +24,21 @@ export default async function LoginPage({
             <p className="text-base leading-7 text-slate-300">
               This build includes admin, employer, and employee workspaces with hiring, onboarding, leave, payroll, payslips, and offboarding flows.
             </p>
-            <div className="grid gap-3 md:grid-cols-3">
-              {demoAccounts.map((account) => (
-                <div
-                  key={account.email}
-                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left"
-                >
-                  <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{account.role}</p>
-                  <p className="mt-2 text-sm font-medium text-white">{account.email}</p>
-                  <p className="mt-2 text-xs text-slate-300">{account.password}</p>
-                </div>
-              ))}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Account access</p>
+                <p className="mt-2 text-sm font-medium text-white">Use the credentials issued by your administrator.</p>
+                <p className="mt-2 text-xs leading-6 text-slate-300">
+                  Employers and employees should sign in with their latest temporary or active password.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Need help?</p>
+                <p className="mt-2 text-sm font-medium text-white">Contact an admin for password reset support.</p>
+                <p className="mt-2 text-xs leading-6 text-slate-300">
+                  Admins can reset employer and employee access directly from the portal.
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -56,7 +54,6 @@ export default async function LoginPage({
               <span>Email</span>
               <input
                 name="email"
-                defaultValue="admin@eor.com"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
                 placeholder="name@company.com"
               />
@@ -67,7 +64,6 @@ export default async function LoginPage({
               <input
                 type="password"
                 name="password"
-                defaultValue="Admin@123"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
                 placeholder="Password"
               />
@@ -75,7 +71,7 @@ export default async function LoginPage({
 
             {error ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                Invalid credentials. Use one of the seeded portal accounts shown on the left.
+                Invalid credentials. Check the email and password issued by your administrator.
               </div>
             ) : null}
 

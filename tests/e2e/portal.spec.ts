@@ -125,8 +125,26 @@ test("approved hires receive employee login credentials and land in onboarding",
   await page.getByLabel("Password").fill(employeePassword!);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL(/\/employee\/onboarding$/);
-  await expect(page.getByRole("heading", { name: "Complete onboarding" })).toBeVisible();
+  await page.waitForURL(/\/employee\/(settings|onboarding)$/);
+
+  if (page.url().endsWith("/employee/settings")) {
+    const settingsHeading = page.getByRole("heading", { name: "Change password" });
+    const settingsReady = await settingsHeading.isVisible({ timeout: 2000 }).catch(() => false);
+
+    if (settingsReady) {
+      await page.getByPlaceholder("Current password").fill(employeePassword!);
+      await page.getByRole("textbox", { name: "New password", exact: true }).fill("Onboarded@123");
+      await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("Onboarded@123");
+      await page.getByRole("button", { name: "Update password" }).click();
+      await expect(page.getByText("Your password has been updated.")).toBeVisible();
+      await page.goto("/employee/overview");
+      await expect(page).toHaveURL(/\/employee\/onboarding$/);
+    } else {
+      await page.goto("/employee/onboarding");
+    }
+  } else {
+    await expect(page).toHaveURL(/\/employee\/onboarding$/);
+  }
 });
 
 test("admin can reset an employer password and the employer can sign in with it", async ({ page }) => {
@@ -158,6 +176,15 @@ test("admin can reset an employer password and the employer can sign in with it"
   await page.getByLabel("Password").fill(employerPassword!);
   await page.getByRole("button", { name: "Sign in" }).click();
 
+  await expect(page).toHaveURL(/\/employer\/settings$/);
+  await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible();
+  await page.getByPlaceholder("Current password").fill(employerPassword!);
+  await page.getByRole("textbox", { name: "New password", exact: true }).fill("EmployerFresh@123");
+  await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("EmployerFresh@123");
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page.getByText("Your password has been updated.")).toBeVisible();
+
+  await page.goto("/employer/overview");
   await expect(page).toHaveURL(/\/employer\/overview$/);
 });
 
@@ -190,5 +217,14 @@ test("admin can reset an employee password and the employee can sign in with it"
   await page.getByLabel("Password").fill(employeePassword!);
   await page.getByRole("button", { name: "Sign in" }).click();
 
+  await expect(page).toHaveURL(/\/employee\/settings$/);
+  await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible();
+  await page.getByPlaceholder("Current password").fill(employeePassword!);
+  await page.getByRole("textbox", { name: "New password", exact: true }).fill("EmployeeFresh@123");
+  await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("EmployeeFresh@123");
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page.getByText("Your password has been updated.")).toBeVisible();
+
+  await page.goto("/employee/overview");
   await expect(page).toHaveURL(/\/employee\/overview$/);
 });

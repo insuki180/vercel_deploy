@@ -37,6 +37,7 @@ export interface PortalUser {
   role: PortalRole;
   companyId?: string;
   employeeId?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface CompanyRecord {
