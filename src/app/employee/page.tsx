@@ -9,7 +9,7 @@ export default async function EmployeeIndexPage() {
   }
   const scoped = await getScopedSelectors(user);
 
-  if (scoped.employee?.status === "pending_onboarding") {
+  if (!user.mustChangePassword && scoped.employee?.status === "pending_onboarding") {
     redirect("/employee/onboarding");
   }
 

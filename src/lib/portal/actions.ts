@@ -357,7 +357,7 @@ export async function createHiringRequestAction(formData: FormData) {
       notes: String(formData.get("notes") ?? ""),
     });
 
-    touchPortalPaths();
+    touchPortalPaths(["/", "/admin", "/admin/hiring", "/employer", "/employer/hiring"]);
     redirect("/employer/hiring");
     return;
   }

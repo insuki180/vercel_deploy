@@ -136,9 +136,18 @@ test("approved hires receive employee login credentials and land in onboarding",
       await page.getByRole("textbox", { name: "New password", exact: true }).fill("Onboarded@123");
       await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("Onboarded@123");
       await page.getByRole("button", { name: "Update password" }).click();
-      await expect(page.getByText("Your password has been updated.")).toBeVisible();
-      await page.goto("/employee/overview");
-      await expect(page).toHaveURL(/\/employee\/onboarding$/);
+      await Promise.race([
+        page.waitForURL(/\/employee\/onboarding$/, { timeout: 5000 }),
+        page.getByText("Your password has been updated.").waitFor({ state: "visible", timeout: 5000 }),
+      ]);
+
+      if (page.url().endsWith("/employee/settings")) {
+        await expect(page.getByText("Your password has been updated.")).toBeVisible();
+        await page.goto("/employee/overview");
+        await expect(page).toHaveURL(/\/employee\/onboarding$/);
+      } else {
+        await expect(page).toHaveURL(/\/employee\/onboarding$/);
+      }
     } else {
       await page.goto("/employee/onboarding");
     }

@@ -26,7 +26,7 @@ export default async function EmployeeSectionRoute({
     notFound();
   }
 
-  if (scoped.employee.status === "pending_onboarding" && section !== "onboarding") {
+  if (!user.mustChangePassword && scoped.employee.status === "pending_onboarding" && section !== "onboarding") {
     redirect("/employee/onboarding");
   }
 
