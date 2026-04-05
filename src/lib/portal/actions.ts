@@ -159,7 +159,7 @@ export async function createCompanyAction(formData: FormData): Promise<CreateCom
       password: String(formData.get("password") ?? ""),
     });
 
-    touchPortalPaths(["/", "/admin", "/admin/employers"]);
+    touchPortalPaths(["/admin/employers"]);
 
     return {
       status: "success",

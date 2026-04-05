@@ -219,9 +219,9 @@ describe("portal actions in Supabase mode", () => {
         employerPassword: "Temp@12345",
       },
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/");
-    expect(revalidatePath).toHaveBeenCalledWith("/admin");
     expect(revalidatePath).toHaveBeenCalledWith("/admin/employers");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/");
+    expect(revalidatePath).not.toHaveBeenCalledWith("/admin");
     expect(revalidatePath).not.toHaveBeenCalledWith("/employer");
     expect(revalidatePath).not.toHaveBeenCalledWith("/employee");
   });
