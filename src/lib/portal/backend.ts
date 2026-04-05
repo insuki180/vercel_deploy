@@ -954,16 +954,15 @@ export async function reviewHiringRequestInBackend(input: {
     return;
   }
 
-  await supabase
-    .from("hiring_requests")
-    .update({
-      status: input.decision === "rejected" ? "rejected" : "onboarding_open",
-      reviewed_at: nowIso(),
-      leave_policy: input.leavePolicy,
-    })
-    .eq("id", input.hiringRequestId);
-
   if (input.decision === "rejected") {
+    await supabase
+      .from("hiring_requests")
+      .update({
+        status: "rejected",
+        reviewed_at: nowIso(),
+        leave_policy: input.leavePolicy,
+      })
+      .eq("id", input.hiringRequestId);
     return null;
   }
 
@@ -974,6 +973,14 @@ export async function reviewHiringRequestInBackend(input: {
     employeePassword,
     safeString(request.candidate_name),
   );
+  await supabase.from("profiles").upsert({
+    id: authUser.id,
+    role: "employee",
+    full_name: safeString(request.candidate_name),
+    company_id: safeString(request.company_id),
+    must_change_password: true,
+  });
+
   await supabase.from("employees").insert({
     id: employeeId,
     user_id: authUser.id,
@@ -1034,6 +1041,15 @@ export async function reviewHiringRequestInBackend(input: {
     status: "approved",
     detail: "Admin approved hiring request and created employee login credentials.",
   });
+
+  await supabase
+    .from("hiring_requests")
+    .update({
+      status: "onboarding_open",
+      reviewed_at: nowIso(),
+      leave_policy: input.leavePolicy,
+    })
+    .eq("id", input.hiringRequestId);
 
   return {
     employeeId,

@@ -24,6 +24,7 @@ const mutatePortalState = vi.fn((updater: (state: MinimalPortalState) => void) =
 
 const getPortalBackendMode = vi.fn(() => "demo");
 const hasSupabaseServiceRole = vi.fn(() => false);
+const createSupabaseAdminClient = vi.fn();
 
 vi.mock("server-only", () => ({}));
 
@@ -35,6 +36,10 @@ vi.mock("@/lib/portal/demo-store", () => ({
 vi.mock("@/lib/supabase/env", () => ({
   getPortalBackendMode,
   hasSupabaseServiceRole,
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/portal/ids", () => ({
@@ -88,12 +93,9 @@ describe("reviewHiringRequestInBackend", () => {
       leavePolicy: { casual: 7, sick: 9, earned: 14 },
     });
 
-    expect(result).toEqual({
-      employeeId: "employee_123",
-      employeeName: "Asha Rao",
-      employeeEmail: "asha@example.com",
-      employeePassword: expect.any(String),
-    });
+    expect(result?.employeeName).toBe("Asha Rao");
+    expect(result?.employeeEmail).toBe("asha@example.com");
+    expect(result?.employeePassword).toEqual(expect.any(String));
     expect(mockState.users).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -115,5 +117,106 @@ describe("reviewHiringRequestInBackend", () => {
         }),
       ]),
     );
+  });
+
+  it("creates the employee profile before inserting the employee row in supabase mode", async () => {
+    getPortalBackendMode.mockReturnValue("supabase");
+    hasSupabaseServiceRole.mockReturnValue(true);
+
+    const callOrder: string[] = [];
+    const requestSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "hire_123",
+        company_id: "company_123",
+        candidate_name: "Asha Rao",
+        candidate_email: "asha@example.com",
+        candidate_phone: "+91 9999999999",
+        designation: "Designer",
+        contract_type: "full_time",
+        work_location: "Remote",
+        proposed_salary: 90000,
+        currency: "INR",
+        target_joining_date: "2026-04-30",
+      },
+    });
+    const requestEq = vi.fn(() => ({ single: requestSingle }));
+    const requestSelect = vi.fn(() => ({ eq: requestEq }));
+    const requestUpdateEq = vi.fn().mockResolvedValue({ error: null });
+    const requestUpdate = vi.fn(() => ({
+      eq: requestUpdateEq,
+    }));
+
+    const employeeInsert = vi.fn(async () => {
+      callOrder.push("employees.insert");
+      return { error: null };
+    });
+
+    const profileUpsert = vi.fn(async (payload) => {
+      callOrder.push(`profiles.upsert:${payload.employee_id ? "with-employee" : "without-employee"}`);
+      return { error: null };
+    });
+
+    const onboardingInsert = vi.fn().mockResolvedValue({ error: null });
+    const leavePolicyInsert = vi.fn().mockResolvedValue({ error: null });
+    const leaveBalancesInsert = vi.fn().mockResolvedValue({ error: null });
+    const lifecycleInsert = vi.fn().mockResolvedValue({ error: null });
+
+    const mockSupabase = {
+      from: vi.fn((table: string) => {
+        if (table === "hiring_requests") {
+          return {
+            select: requestSelect,
+            update: requestUpdate,
+          };
+        }
+        if (table === "profiles") {
+          return { upsert: profileUpsert };
+        }
+        if (table === "employees") {
+          return { insert: employeeInsert };
+        }
+        if (table === "employee_onboarding_requests") {
+          return { insert: onboardingInsert };
+        }
+        if (table === "leave_policies") {
+          return { insert: leavePolicyInsert };
+        }
+        if (table === "employee_leave_balances") {
+          return { insert: leaveBalancesInsert };
+        }
+        if (table === "employee_lifecycle_events") {
+          return { insert: lifecycleInsert };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      auth: {
+        admin: {
+          listUsers: vi.fn().mockResolvedValue({ data: { users: [] } }),
+          createUser: vi.fn().mockResolvedValue({
+            data: { user: { id: "auth_employee_1", email: "asha@example.com" } },
+            error: null,
+          }),
+        },
+      },
+    };
+
+    createSupabaseAdminClient.mockReturnValue(mockSupabase);
+
+    const { reviewHiringRequestInBackend } = await import("@/lib/portal/backend");
+
+    const result = await reviewHiringRequestInBackend({
+      hiringRequestId: "hire_123",
+      decision: "approved",
+      leavePolicy: { casual: 7, sick: 9, earned: 14 },
+    });
+
+    expect(result?.employeeName).toBe("Asha Rao");
+    expect(result?.employeeEmail).toBe("asha@example.com");
+    expect(result?.employeePassword).toEqual(expect.any(String));
+    expect(callOrder[0]).toBe("profiles.upsert:without-employee");
+    expect(callOrder[1]).toBe("employees.insert");
+    expect(profileUpsert).toHaveBeenCalledTimes(2);
+    expect(requestUpdate).toHaveBeenCalledTimes(1);
+    expect(requestUpdateEq).toHaveBeenCalledWith("id", "hire_123");
   });
 });
